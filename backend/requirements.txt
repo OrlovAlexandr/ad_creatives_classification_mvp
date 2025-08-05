@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+celery[redis]
+Pillow
+python-multipart
+pydantic
+python-dotenv
