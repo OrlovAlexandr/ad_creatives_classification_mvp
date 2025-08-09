@@ -38,10 +38,11 @@ async def upload_files(
     files: List[UploadFile] = File(...), 
     group_id: str = Form(...),
     creative_ids: List[str] = Form(...),
+    original_filenames: List[str] = Form(...),
     db: Session = Depends(get_db)
     ):
     """Загрузка и сохранение файлов"""
-    if len(creative_ids) != len(files):
+    if len(creative_ids) != len(files) or len(creative_ids) != len(original_filenames):
         raise HTTPException(
             status_code=400, 
             detail="Количество creative_ids не совпадает с количеством файлов"
@@ -50,24 +51,16 @@ async def upload_files(
     uploaded = 0
     errors = []
 
-    for file, creative_id in zip(files, creative_ids):
+    for file, creative_id, orig_filename in zip(files, creative_ids, original_filenames):
         try:
             # Проверка формата
             ext = file.filename.split(".")[-1].lower()
             if ext not in ["jpg", "jpeg", "png", "webp"]:
-                errors.append(f"{file.filename}: неподдерживаемый формат")
+                errors.append(f"{orig_filename}: неподдерживаемый формат")
                 continue
-
-            # Генерация ID
-            # creative_id = db.query(database.Creative).count() + 1  # TODO: перенести генерацию на фронт (maybe)
             
             # Уникальное имя файла — UUID
-            filename = f"{creative_id}.{ext}"
-            file_path = os.path.join("uploads", filename)
-
-            # Путь сохранения
-            # filename = f"{creative_id}.{ext}"  # TODO: придумать как лучше назвать файл
-            # file_path = os.path.join("uploads", filename)
+            file_path = os.path.join("uploads", file.filename)
 
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)  # TODO: сохранить на Minio
@@ -80,7 +73,7 @@ async def upload_files(
             creative = database.Creative(
                 creative_id=creative_id,
                 group_id=group_id,
-                original_filename=file.filename,
+                original_filename=orig_filename,
                 file_path=file_path,
                 file_size=os.path.getsize(file_path),
                 file_format=ext,
@@ -95,7 +88,7 @@ async def upload_files(
 
             uploaded += 1
         except Exception as e:
-            errors.append(f"{file.filename}: {str(e)}")
+            errors.append(f"{orig_filename}: {str(e)}")
 
     return UploadResponse(uploaded=uploaded, group_id=group_id, errors=errors)
 
@@ -146,6 +139,18 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):  # был int
     else:
         raise HTTPException(status_code=404, detail="Анализ не нашелся")
 
+    creative_data = {
+        "creative_id": creative.creative_id,
+        "group_id": creative.group_id,
+        "original_filename": creative.original_filename,
+        "file_path": creative.file_path,
+        "file_size": creative.file_size,
+        "file_format": creative.file_format,
+        "image_width": creative.image_width,
+        "image_height": creative.image_height,
+        "upload_timestamp": creative.upload_timestamp.isoformat()  # ← преобразуем в строку
+    }
+
     if analysis and analysis.analysis_status == "SUCCESS":
         analysis_data = {
             "dominant_colors": analysis.dominant_colors,
@@ -159,8 +164,35 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):  # был int
         analysis_data = None
 
     # Конвертация ORM в Pydantic
-    result = CreativeBase.model_validate(creative)
+    result = CreativeBase(**creative_data) 
+    # result = CreativeBase.model_validate(creative)
     return CreativeDetail(**result.model_dump(), analysis=analysis_data)
+
+
+@app.get("/groups/{group_id}/creatives")
+def get_creatives_by_group(group_id: str, db: Session = Depends(get_db)):
+    """Возвращает список креативов в группе с данными и результатом анализа"""
+    creatives = db.query(database.Creative).filter(
+        database.Creative.group_id == group_id
+        ).all()
+    result = []
+    for c in creatives:
+        analysis = db.query(database.CreativeAnalysis).filter(
+            database.CreativeAnalysis.creative_id == c.creative_id
+        ).first()
+
+        result.append({
+            "creative_id": c.creative_id,
+            "original_filename": c.original_filename,
+            "file_path": c.file_path,
+            "file_size": c.file_size,
+            "file_format": c.file_format,
+            "image_width": c.image_width,
+            "image_height": c.image_height,
+            "upload_timestamp": c.upload_timestamp.isoformat(),
+            "analysis": analysis is not None and analysis.analysis_status == "SUCCESS"
+        })
+    return result
 
 
 @app.get("/analytics/group/{group_id}", response_model=AnalyticsResponse)

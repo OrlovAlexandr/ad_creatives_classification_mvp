@@ -78,28 +78,26 @@ def fetch_groups_mock():
 
 
 def upload_files(files, group_id: str, creative_ids: list[str]):
-    """
-    Отправляет файлы на бэкенд в указанную группу.
-    TODO: генерация случайного id группы.
-    """
+    """Отправляет файлы на бэкенд в указанную группу."""
     if USE_MOCK:
-        st.success(f"✅ Загрузка успешна (режим имитации). Группа: {group_id}, файлов: {len(files)}")
+        st.success(f"Загрузка успешна (режим имитации). Группа: {group_id}, файлов: {len(files)}")
         return {"uploaded": len(files), "group_id": group_id, "errors": []}
     else:
         try:
             url = f"{BACKEND_URL}/upload"
             files_data = []
+
+            original_filenames = [f.name for f in files]
+
             for file, cid in zip(files, creative_ids):
                 ext = file.name.split(".")[-1].lower()
-                # Используем UUID как имя файла
-                filename = f"{cid}.{ext}"
+                filename = f"{cid}.{ext}"  # Называем файлы по ID креатива
                 files_data.append(("files", (filename, file, file.type)))
 
-
-            # files_data = [("files", (f.name, f, f.type)) for f in files]
             data = {
                 "group_id": group_id,
-                "creative_ids": creative_ids  # Передаём ID креативов
+                "creative_ids": creative_ids,
+                "original_filenames": original_filenames
             }
             response = requests.post(url, files=files_data, data=data)
             response.raise_for_status()
@@ -110,7 +108,7 @@ def upload_files(files, group_id: str, creative_ids: list[str]):
 
 
 @st.cache_data(ttl=300)
-def fetch_creative_details(creative_id: int) -> Optional[Dict]:
+def fetch_creative_details(creative_id: str) -> Optional[Dict]:  # был int
     """Получает детали креатива с бэкенда (или из mock)"""
     if USE_MOCK:
         try:
@@ -151,6 +149,25 @@ def fetch_analytics(group_id):
         except:
             st.error("Ошибка загрузки аналитики")
             return None
+
+
+def fetch_creatives_by_group(group_id: str) -> Optional[list]:
+    """Получает список креативов по ID группы"""
+    if USE_MOCK:
+        try:
+            with open(f"mocks/creatives_group_{group_id}.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            st.warning(f"Mock для креативов группы {group_id} не найден: {e}")
+            return []
+    else:
+        try:
+            response = requests.get(f"{BACKEND_URL}/groups/{group_id}/creatives")
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            st.error(f"Ошибка загрузки креативов группы {group_id}: {e}")
+            return []    
 
 
 # Страница: Загрузка креативов
@@ -244,72 +261,133 @@ def page_analytics():
 
 # Страница: Детали креатива
 def page_details():
-    st.header("🔍 Детали креатива")
-    creative_id = st.number_input("ID креатива", min_value=1, step=1)
-    if st.button("Загрузить"):
-        data = fetch_creative_details(creative_id)  # Детали креатива
-        if data:
-            try:
-                # Получаем OCR и объекты
-                ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
-                detected_objects = data.get("analysis", {}).get("detected_objects", [])
+    st.header("Детали креатива")
 
-                # Рисуем рамки
-                image_with_boxes = draw_bounding_boxes(
-                    image_path=data["file_path"],
-                    ocr_blocks=ocr_blocks,
-                    detected_objects=detected_objects
-                )
+    # Получаем группы
+    groups = fetch_groups()
+    if not groups:
+        st.info("Нет доступных групп")
+        return
+    
+    group_display_map = {g["group_id"]: g["display_name"] for g in groups}
+    group_ids = list(group_display_map.keys())
 
-                # Отображаем
-                st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
+    selected_group = st.selectbox(
+        "Выберите группу",
+        options=group_ids,
+        format_func=lambda gid: group_display_map[gid],
+        key="select_group_details"
+    )
 
-            except Exception as e:
-                st.error(f"Ошибка при отрисовке: {e}")
-                st.image(data["file_path"], width=300, caption="Оригинал")
+    if not selected_group:
+        return
 
-            # Метаданные
-            st.write(f"**Файл:** {data['original_filename']}")
-            st.write(f"**Размер:** {data['file_size']} байт")
-            st.write(f"**Формат:** {data['file_format']}")
-            st.write(f"**Размеры:** {data['image_width']}x{data['image_height']}")
-            st.write(f"**Дата загрузки:** {data['upload_timestamp']}")
+    # Получаем креативы
+    with st.spinner("Загрузка креативов..."):
+        creatives = fetch_creatives_by_group(selected_group)
 
-            main_topic = data.get('analysis', {}).get('main_topic', '—')
-            st.write(f"**Основная тема:** {main_topic}")
+    if not creatives:
+        st.info("В этой группе нет креативов.")
+        return
+    
+    # Табличка с креативами выбранной группы
+    st.subheader("Креативы в группе")
+    df_creatives = pd.DataFrame([
+        {
+            "ID": c["creative_id"],
+            "Оригинальное имя": c["original_filename"],
+            "Файл": f"{c['creative_id']}.{c['file_format']}",
+            "Размер": f"{c['image_width']}x{c['image_height']}",
+            "Дата загрузки": c["upload_timestamp"].split("T")[0],
+            "Статус": "Готово" if c.get("analysis") else "В обработке"
+        }
+        for c in creatives
+    ])
 
-            ocr_text = data.get('analysis', {}).get('ocr_text', '—')
-            st.subheader("Распознанный текст")
-            st.text_area("OCR", ocr_text, height=150)
+    st.dataframe(df_creatives, use_container_width=True)
 
-            ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
-            if ocr_blocks:
-                st.write("Блоки текста:")
-                st.dataframe(pd.DataFrame(ocr_blocks))
-            else:
-                st.info("Текст не распознан.")
+    # Выбор креатива из таблицы
+    creative_ids = df_creatives["ID"].tolist()
+    id_to_filename = dict(zip(df_creatives['ID'], df_creatives['Оригинальное имя']))
+    selected_creative_id = st.selectbox(
+        "Выберите креатив для просмотра деталей",
+        options=creative_ids,
+        format_func=lambda cid: f"{cid} — {id_to_filename[cid]}",
+        key="select_creative_details"
+    )
 
-            detected_objects = data.get('analysis', {}).get('detected_objects', [])
-            if detected_objects:
-                st.subheader("Обнаруженные объекты")
-                st.dataframe(pd.DataFrame(detected_objects))
-            else:
-                st.info("Объекты не обнаружены.")
+    if selected_creative_id:
+        with st.spinner("Загрузка деталей креатива..."):
+            data = fetch_creative_details(selected_creative_id)
 
-            dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
-            if dominant_colors:
-                st.subheader("Доминирующие цвета")
-                cols = st.columns(len(dominant_colors))
-                for i, c in enumerate(dominant_colors):
-                    with cols[i]:
-                        st.color_picker(f"{c['hex']}", c["hex"], disabled=True)
-                        st.caption(f"{c['percent']}%")
-            else:
-                st.info("Цвета не определены.")
+        if not data:
+            st.error("Не удалось загрузить данные креатива.")
+            return
+        
+        st.divider()
+        st.subheader(f"Детали креатива: {selected_creative_id}")
+
+        try:
+            # Получаем OCR и объекты
+            ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
+            detected_objects = data.get("analysis", {}).get("detected_objects", [])
+
+            # Рисуем рамки
+            image_with_boxes = draw_bounding_boxes(
+                image_path=data["file_path"],
+                ocr_blocks=ocr_blocks,
+                detected_objects=detected_objects
+            )
+
+            # Отображаем
+            st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
+
+        except Exception as e:
+            st.error(f"Ошибка при отрисовке: {e}")
+            st.image(data["file_path"], width=300, caption="Оригинал")
+
+        # Метаданные
+        st.write(f"**Файл:** {data['original_filename']}")
+        st.write(f"**Размер:** {data['file_size']} байт")
+        st.write(f"**Формат:** {data['file_format']}")
+        st.write(f"**Размеры:** {data['image_width']}x{data['image_height']}")
+        st.write(f"**Дата загрузки:** {data['upload_timestamp']}")
+
+        main_topic = data.get('analysis', {}).get('main_topic', '—')
+        st.write(f"**Основная тема:** {main_topic}")
+
+        ocr_text = data.get('analysis', {}).get('ocr_text', '—')
+        st.subheader("Распознанный текст")
+        st.text_area("OCR", ocr_text, height=150)
+
+        ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
+        if ocr_blocks:
+            st.write("Блоки текста:")
+            st.dataframe(pd.DataFrame(ocr_blocks))
+        else:
+            st.info("Текст не распознан.")
+
+        detected_objects = data.get('analysis', {}).get('detected_objects', [])
+        if detected_objects:
+            st.subheader("Обнаруженные объекты")
+            st.dataframe(pd.DataFrame(detected_objects))
+        else:
+            st.info("Объекты не обнаружены.")
+
+        dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
+        if dominant_colors:
+            st.subheader("Доминирующие цвета")
+            cols = st.columns(len(dominant_colors))
+            for i, c in enumerate(dominant_colors):
+                with cols[i]:
+                    st.color_picker(f"{c['hex']}", c["hex"], disabled=True)
+                    st.caption(f"{c['percent']}%")
+        else:
+            st.info("Цвета не определены.")
 
 
 # Боковое меню
-st.sidebar.title("📋 Меню")
+st.sidebar.title("Меню")
 page = st.sidebar.radio("Выберите раздел", ["Загрузка", "Аналитика", "Детали креатива"])
 
 if page == "Загрузка":
