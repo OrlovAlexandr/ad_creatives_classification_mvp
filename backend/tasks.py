@@ -11,10 +11,12 @@ celery = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)
 
 # Имитация ML-обработки
 @celery.task(bind=True, max_retries=3)
-def process_creative(self, creative_id: int):
+def process_creative(self, creative_id: str):  # был int
     db = SessionLocal()
     try:
-        creative = db.query(database.Creative).filter(database.Creative.creative_id == creative_id).first()
+        creative = db.query(database.Creative).filter(
+            database.Creative.creative_id == creative_id
+            ).first()
         if not creative:
             raise Exception("Креатив не найден")
 

@@ -4,18 +4,24 @@ import shutil
 from typing import List
 
 from PIL import Image
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
 
 import database
 import tasks
-from database import SessionLocal
+from contextlib import asynccontextmanager
+from database import SessionLocal, engine, Base
 from models import CreativeBase, CreativeDetail, UploadResponse, AnalyticsResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Creative Classification API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+app = FastAPI(title="Creative Classification API", lifespan=lifespan)
 
 
 def get_db():
@@ -28,12 +34,23 @@ def get_db():
 
 
 @app.post("/upload", response_model=UploadResponse)
-async def upload_files(files: List[UploadFile] = File(...), group_id: str = "1", db: Session = Depends(get_db)):
+async def upload_files(
+    files: List[UploadFile] = File(...), 
+    group_id: str = Form(...),
+    creative_ids: List[str] = Form(...),
+    db: Session = Depends(get_db)
+    ):
     """Загрузка и сохранение файлов"""
+    if len(creative_ids) != len(files):
+        raise HTTPException(
+            status_code=400, 
+            detail="Количество creative_ids не совпадает с количеством файлов"
+            )
+    
     uploaded = 0
     errors = []
 
-    for file in files:
+    for file, creative_id in zip(files, creative_ids):
         try:
             # Проверка формата
             ext = file.filename.split(".")[-1].lower()
@@ -42,11 +59,15 @@ async def upload_files(files: List[UploadFile] = File(...), group_id: str = "1",
                 continue
 
             # Генерация ID
-            creative_id = db.query(database.Creative).count() + 1  # TODO: перенести генерацию на фронт (maybe)
+            # creative_id = db.query(database.Creative).count() + 1  # TODO: перенести генерацию на фронт (maybe)
+            
+            # Уникальное имя файла — UUID
+            filename = f"{creative_id}.{ext}"
+            file_path = os.path.join("uploads", filename)
 
             # Путь сохранения
-            filename = f"{creative_id}.{ext}"  # TODO: придумать как лучше назвать файл
-            file_path = os.path.join("uploads", filename)
+            # filename = f"{creative_id}.{ext}"  # TODO: придумать как лучше назвать файл
+            # file_path = os.path.join("uploads", filename)
 
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)  # TODO: сохранить на Minio
@@ -58,7 +79,7 @@ async def upload_files(files: List[UploadFile] = File(...), group_id: str = "1",
             # Сохранение в БД
             creative = database.Creative(
                 creative_id=creative_id,
-                group_id=int(group_id),
+                group_id=group_id,
                 original_filename=file.filename,
                 file_path=file_path,
                 file_size=os.path.getsize(file_path),
@@ -86,7 +107,9 @@ def get_groups(db: Session = Depends(get_db)):
     result = []
     for (group_id,) in groups:
         # Количество креативов в группе
-        count = db.query(database.Creative).filter(database.Creative.group_id == group_id).count()
+        count = db.query(database.Creative).filter(
+            database.Creative.group_id == group_id
+            ).count()
 
         # Первый креатив в группе (дата создания)
         first = db.query(database.Creative.upload_timestamp).filter(
@@ -101,7 +124,7 @@ def get_groups(db: Session = Depends(get_db)):
 
 
 @app.get("/creatives/{creative_id}", response_model=CreativeDetail)
-def get_creative(creative_id: int, db: Session = Depends(get_db)):
+def get_creative(creative_id: str, db: Session = Depends(get_db)):  # был int
     """Детали креатива"""
     logger.info(f"GET /creatives/{creative_id}")
 
@@ -141,7 +164,7 @@ def get_creative(creative_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/analytics/group/{group_id}", response_model=AnalyticsResponse)
-def get_analytics(group_id: int, db: Session = Depends(get_db)):
+def get_analytics(group_id: str, db: Session = Depends(get_db)):  # был int
     """
     Аналитика группы креативов.
     TODO: продумать что показывать в аналитике, и что возвращать на фронт

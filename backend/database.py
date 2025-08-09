@@ -14,8 +14,8 @@ Base = declarative_base()
 class Creative(Base):
     __tablename__ = "creatives"
 
-    creative_id = Column(Integer, primary_key=True, index=True)
-    group_id = Column(Integer, index=True)
+    creative_id = Column(String, primary_key=True, index=True)  # Был int
+    group_id = Column(String, index=True)  # Был int
     original_filename = Column(String)
     file_path = Column(String)
     upload_timestamp = Column(DateTime, default=datetime.datetime.utcnow)
@@ -29,7 +29,7 @@ class CreativeAnalysis(Base):
     __tablename__ = "creative_analysis"
 
     analysis_id = Column(Integer, primary_key=True, index=True)
-    creative_id = Column(Integer, ForeignKey("creatives.creative_id"))
+    creative_id = Column(String, ForeignKey("creatives.creative_id"), nullable=False)  # Был Int
     dominant_colors = Column(JSON)
     secondary_colors = Column(JSON)
     ocr_text = Column(Text)
@@ -44,4 +44,4 @@ class CreativeAnalysis(Base):
 
 
 # Создание таблиц
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine)  # Перенесено в main (антипаттерн)

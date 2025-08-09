@@ -11,15 +11,15 @@ class UploadResponse(BaseModel):
 
 
 class CreativeBase(BaseModel):
-    creative_id: int
-    group_id: int
+    creative_id: str
+    group_id: str
     original_filename: str
     file_path: str
-    upload_timestamp: datetime
     file_size: int
     file_format: str
     image_width: int
     image_height: int
+    upload_timestamp: str
 
     class Config:
         from_attributes = True
@@ -56,3 +56,8 @@ class AnalyticsResponse(BaseModel):
     topics: List[Dict]
     dominant_colors: List[Dict]
     objects: List[Dict]
+
+class UploadResponse(BaseModel):
+    uploaded: int
+    group_id: str
+    errors: List[str]

@@ -2,6 +2,7 @@ import json
 import os
 from datetime import datetime
 from typing import Dict, Optional
+import uuid
 
 import pandas as pd
 import requests
@@ -20,6 +21,14 @@ BACKEND_URL = os.getenv("BACKEND_URL") if not USE_MOCK else "http://localhost:80
 st.set_page_config(page_title="Классификатор креативов", layout="wide")
 
 
+def generate_group_id():
+    now = datetime.now()
+    return f"grp_{now.strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:6]}"
+
+
+def generate_creative_id():
+    return str(uuid.uuid4())
+
 # Вспомогательные функции
 @st.cache_data(ttl=600)
 def fetch_groups():
@@ -27,7 +36,17 @@ def fetch_groups():
     if USE_MOCK:
         try:
             with open("mocks/groups.json", "r", encoding="utf-8") as f:
-                return json.load(f)
+                raw = json.load(f)
+            for g in raw:
+                try:
+                    # Извлекаем временную метку из grp_20250807_143000_abc123
+                    ts_part = g["group_id"].split('_', 3)[:3]  # ['grp', '20250807', '143000']
+                    dt_str = f"{ts_part[1]}_{ts_part[2]}"
+                    dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
+                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M")
+                except:
+                    g["display_name"] = g["group_id"]
+            return raw
         except Exception as e:
             st.error(f"Ошибка загрузки mock-данных: {e}")
             return []
@@ -35,7 +54,16 @@ def fetch_groups():
         try:
             response = requests.get(f"{BACKEND_URL}/groups")
             response.raise_for_status()
-            return response.json()
+            raw = response.json()
+            for g in raw:
+                try:
+                    ts_part = g["group_id"].split('_', 3)[:3]
+                    dt_str = f"{ts_part[1]}_{ts_part[2]}"
+                    dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
+                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M")
+                except:
+                    g["display_name"] = g["group_id"]
+            return raw
         except Exception:
             st.error("Бэкенд недоступен. Включён режим имитации.")
             return fetch_groups_mock()
@@ -49,7 +77,7 @@ def fetch_groups_mock():
     ]
 
 
-def upload_files(files, group_id: str):
+def upload_files(files, group_id: str, creative_ids: list[str]):
     """
     Отправляет файлы на бэкенд в указанную группу.
     TODO: генерация случайного id группы.
@@ -60,8 +88,19 @@ def upload_files(files, group_id: str):
     else:
         try:
             url = f"{BACKEND_URL}/upload"
-            files_data = [("files", (f.name, f, f.type)) for f in files]
-            data = {"group_id": group_id}
+            files_data = []
+            for file, cid in zip(files, creative_ids):
+                ext = file.name.split(".")[-1].lower()
+                # Используем UUID как имя файла
+                filename = f"{cid}.{ext}"
+                files_data.append(("files", (filename, file, file.type)))
+
+
+            # files_data = [("files", (f.name, f, f.type)) for f in files]
+            data = {
+                "group_id": group_id,
+                "creative_ids": creative_ids  # Передаём ID креативов
+            }
             response = requests.post(url, files=files_data, data=data)
             response.raise_for_status()
             return response.json()
@@ -117,7 +156,13 @@ def fetch_analytics(group_id):
 # Страница: Загрузка креативов
 def page_upload():
     st.header("Загрузка креативов")
-    group_id = st.text_input("ID группы", value="101")  # TODO: генерация случайного id
+
+    if "current_group_id" not in st.session_state:
+        st.session_state.current_group_id = generate_group_id()
+    
+    st.text(f"Текущая группа: {st.session_state.current_group_id}")
+
+    # group_id = st.text_input("ID группы", value="101")  # TODO: генерация случайного id
     uploaded_files = st.file_uploader(
         "Выберите изображения (JPG, PNG, WebP)",
         type=["jpg", "jpeg", "png", "webp"],
@@ -128,11 +173,17 @@ def page_upload():
     # Кнопка загрузки
     if uploaded_files and st.button("Загрузить"):
         with st.spinner("Идёт загрузка и обработка..."):
-            result = upload_files(uploaded_files, group_id)
+            creative_ids = [generate_creative_id() for _ in uploaded_files]
+
+            result = upload_files(uploaded_files, st.session_state.current_group_id, creative_ids)
+
             if result:
-                st.success(f"Успешно загружено {result['uploaded']} файлов в группу {group_id}")
+                st.success(
+                    f"Успешно загружено {result['uploaded']} файлов в группу {st.session_state.current_group_id}"
+                    )
                 st.json(result)  # Показывает ответ бэкенда
             st.cache_data.clear()  # Обновляет кэш групп
+            st.session_state.pop("current_group_id", None)  # Удаляет группу из сессии
 
 
 # Страница: Просмотр аналитики по группе
@@ -147,8 +198,19 @@ def page_analytics():
         st.info("Нет доступных групп")
         return
 
-    group_ids = [g["group_id"] for g in groups]
-    selected = st.selectbox("Выберите группу", group_ids)  # Выбор группы из выпадающего списка
+
+    group_display_map = {g["group_id"]: g["display_name"] for g in groups}
+    group_ids = list(group_display_map.keys())
+    # group_options = [(g["display_name"], g["group_id"]) for g in groups]
+    # display_names = [item[0] for item in group_options]
+    # group_ids = [item[1] for item in group_options]
+
+    selected = st.selectbox(
+        "Выберите группу",
+        options=group_ids,
+        format_func=lambda gid: group_display_map[gid],
+        key="selected_group_analytics"
+    )
 
     if selected:
         data = fetch_analytics(selected)  # Аналитика по группе
