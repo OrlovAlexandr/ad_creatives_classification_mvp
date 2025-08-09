@@ -7,3 +7,4 @@ opencv-python-headless
 numpy
 icecream
 python-dotenv
+streamlit-aggrid

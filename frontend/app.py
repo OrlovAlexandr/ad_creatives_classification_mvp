@@ -9,6 +9,8 @@ import requests
 import streamlit as st
 from dotenv import load_dotenv
 from icecream import ic
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from st_aggrid.shared import JsCode
 
 from visualizer import draw_bounding_boxes
 
@@ -291,32 +293,61 @@ def page_details():
         return
     
     # Табличка с креативами выбранной группы
-    st.subheader("Креативы в группе")
+    # st.subheader("Креативы в группе")
+    # 'str' object has no attribute 'strftime'
     df_creatives = pd.DataFrame([
         {
             "ID": c["creative_id"],
             "Оригинальное имя": c["original_filename"],
             "Файл": f"{c['creative_id']}.{c['file_format']}",
             "Размер": f"{c['image_width']}x{c['image_height']}",
-            "Дата загрузки": c["upload_timestamp"].split("T")[0],
+            "Время загрузки": c["upload_timestamp"].split(".")[0].replace("T", " "),
             "Статус": "Готово" if c.get("analysis") else "В обработке"
         }
         for c in creatives
     ])
-
-    st.dataframe(df_creatives, use_container_width=True)
+    df_creatives.reset_index(drop=True, inplace=True)
+    # st.dataframe(df_creatives, use_container_width=True)
 
     # Выбор креатива из таблицы
-    creative_ids = df_creatives["ID"].tolist()
-    id_to_filename = dict(zip(df_creatives['ID'], df_creatives['Оригинальное имя']))
-    selected_creative_id = st.selectbox(
-        "Выберите креатив для просмотра деталей",
-        options=creative_ids,
-        format_func=lambda cid: f"{cid} — {id_to_filename[cid]}",
-        key="select_creative_details"
+    # creative_ids = df_creatives["ID"].tolist()
+    # id_to_filename = dict(zip(df_creatives['ID'], df_creatives['Оригинальное имя']))
+    # selected_creative_id = st.selectbox(
+    #     "Выберите креатив для просмотра деталей",
+    #     options=creative_ids,
+    #     format_func=lambda cid: f"{cid} — {id_to_filename[cid]}",
+    #     key="select_creative_details"
+    # )
+
+    gb = GridOptionsBuilder.from_dataframe(df_creatives)
+    gb.configure_default_column(editable=False, wrapText=True, autoHeight=True)
+    gb.configure_selection(selection_mode="single", use_checkbox=False)
+    gb.configure_grid_options(domLayout="autoHeight", suppressRowClickSelection=False)
+
+    grid_options = gb.build()
+
+    grid_response = AgGrid(
+        df_creatives,
+        gridOptions=grid_options,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        height=min(300, 50 * len(df_creatives) + 50),
+        theme="streamlit",
+        key="aggrid_creatives"  # Ключ обязателен
     )
 
-    if selected_creative_id:
+    # selected_creative_id = grid_response["selected_rows"][0]["ID"] if grid_response["selected_rows"] else None
+    selected_rows = grid_response.get("selected_rows", None)
+
+    if selected_rows is not None and len(selected_rows) > 0:
+        row = selected_rows.iloc[0]  # Получаем первую строку
+        selected_creative_id = row.get("ID")  # или row["ID"]
+
+        if not selected_creative_id:
+            st.error("Не удалось получить ID креатива.")
+            return
+
+        st.success(f"Выбран креатив: {selected_creative_id}")
+
         with st.spinner("Загрузка деталей креатива..."):
             data = fetch_creative_details(selected_creative_id)
 
