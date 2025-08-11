@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, JSON, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, JSON, Text, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -14,8 +14,8 @@ Base = declarative_base()
 class Creative(Base):
     __tablename__ = "creatives"
 
-    creative_id = Column(String, primary_key=True, index=True)  # Был int
-    group_id = Column(String, index=True)  # Был int
+    creative_id = Column(String, primary_key=True, index=True)
+    group_id = Column(String, index=True)
     original_filename = Column(String)
     file_path = Column(String)
     upload_timestamp = Column(DateTime, default=datetime.datetime.utcnow)
@@ -29,17 +29,25 @@ class CreativeAnalysis(Base):
     __tablename__ = "creative_analysis"
 
     analysis_id = Column(Integer, primary_key=True, index=True)
-    creative_id = Column(String, ForeignKey("creatives.creative_id"), nullable=False)  # Был Int
-    dominant_colors = Column(JSON)
-    secondary_colors = Column(JSON)
+    creative_id = Column(String, ForeignKey("creatives.creative_id"), nullable=False)
+    # OCR результаты
     ocr_text = Column(Text)
     ocr_blocks = Column(JSON)
-    text_topics = Column(JSON)
+    # YOLO результаты
     detected_objects = Column(JSON)
-    visual_topics = Column(JSON)
+    # Предсказание таргета
     main_topic = Column(String)
+    topic_confidence = Column(Float)
+    # Определени доминантного цвета
+    dominant_colors = Column(JSON)
+
+    # Статусы этапов
+    ocr_status = Column(String, default="PENDING")
+    detection_status = Column(String, default="PENDING")
+    classification_status = Column(String, default="PENDING")
+    overall_status = Column(String, default="PENDING")  # PENDING, PROCESSING, SUCCESS, ERROR
+
     analysis_timestamp = Column(DateTime)
-    analysis_status = Column(String, default="PENDING")
     error_message = Column(Text)
 
 

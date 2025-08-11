@@ -26,13 +26,12 @@ class CreativeBase(BaseModel):
 
 
 class AnalysisBase(BaseModel):
-    dominant_colors: List[Dict]
-    ocr_text: str
-    ocr_blocks: List[Dict]
-    text_topics: List[Dict]
-    detected_objects: List[Dict]
-    main_topic: str
-
+    dominant_colors: List[Dict] = None
+    ocr_text: str = None
+    ocr_blocks: List[Dict] = None
+    detected_objects: List[Dict] = None
+    main_topic: str = None
+    topic_confidence: float = None
     class Config:
         from_attributes = True
 
@@ -61,3 +60,8 @@ class UploadResponse(BaseModel):
     uploaded: int
     group_id: str
     errors: List[str]
+
+
+class UploadRequest(BaseModel):
+    creative_ids: list[str]
+    original_filenames: list[str]

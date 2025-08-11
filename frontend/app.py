@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from typing import Dict, Optional
 import uuid
+import time
 
 import pandas as pd
 import requests
@@ -10,7 +11,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from icecream import ic
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-from st_aggrid.shared import JsCode
+# from st_aggrid.shared import JsCode
 
 from visualizer import draw_bounding_boxes
 
@@ -45,7 +46,7 @@ def fetch_groups():
                     ts_part = g["group_id"].split('_', 3)[:3]  # ['grp', '20250807', '143000']
                     dt_str = f"{ts_part[1]}_{ts_part[2]}"
                     dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
-                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M")
+                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M:%S")
                 except:
                     g["display_name"] = g["group_id"]
             return raw
@@ -54,15 +55,18 @@ def fetch_groups():
             return []
     else:
         try:
+            # st.write(f"Запрос к: {BACKEND_URL}/groups")  # ← DEBUG
             response = requests.get(f"{BACKEND_URL}/groups")
+            # st.write("Ответ /groups:", response.status_code, response.text)  # ← DEBUG
             response.raise_for_status()
             raw = response.json()
+            
             for g in raw:
                 try:
                     ts_part = g["group_id"].split('_', 3)[:3]
                     dt_str = f"{ts_part[1]}_{ts_part[2]}"
                     dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
-                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M")
+                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M:%S")
                 except:
                     g["display_name"] = g["group_id"]
             return raw
@@ -96,12 +100,22 @@ def upload_files(files, group_id: str, creative_ids: list[str]):
                 filename = f"{cid}.{ext}"  # Называем файлы по ID креатива
                 files_data.append(("files", (filename, file, file.type)))
 
+            # import json as json_module
             data = {
                 "group_id": group_id,
-                "creative_ids": creative_ids,
-                "original_filenames": original_filenames
+                # "creative_ids": creative_ids,
+                # "original_filenames": original_filenames
             }
-            response = requests.post(url, files=files_data, data=data)
+            for i, cid in enumerate(creative_ids):
+                data[f"creative_ids"] = creative_ids  # FastAPI автоматически соберёт список
+            for i, name in enumerate(original_filenames):
+                data[f"original_filenames"] = original_filenames
+                
+            response = requests.post(
+                url, 
+                files=files_data, 
+                data=data,
+                )
             response.raise_for_status()
             return response.json()
         except Exception as e:
@@ -181,7 +195,6 @@ def page_upload():
     
     st.text(f"Текущая группа: {st.session_state.current_group_id}")
 
-    # group_id = st.text_input("ID группы", value="101")  # TODO: генерация случайного id
     uploaded_files = st.file_uploader(
         "Выберите изображения (JPG, PNG, WebP)",
         type=["jpg", "jpeg", "png", "webp"],
@@ -190,19 +203,70 @@ def page_upload():
     )
 
     # Кнопка загрузки
-    if uploaded_files and st.button("Загрузить"):
+    if uploaded_files and st.button("Загрузить", key="upload_btn"):
         with st.spinner("Идёт загрузка и обработка..."):
             creative_ids = [generate_creative_id() for _ in uploaded_files]
-
             result = upload_files(uploaded_files, st.session_state.current_group_id, creative_ids)
 
             if result:
                 st.success(
                     f"Успешно загружено {result['uploaded']} файлов в группу {st.session_state.current_group_id}"
                     )
-                st.json(result)  # Показывает ответ бэкенда
-            st.cache_data.clear()  # Обновляет кэш групп
-            st.session_state.pop("current_group_id", None)  # Удаляет группу из сессии
+                st.session_state.uploaded_creatives = creative_ids
+                st.session_state.pop("current_group_id", None)
+
+                fetch_groups.clear()
+
+                # st.json(result)  # ответ бэкенда
+                st.rerun()
+            else:
+                # st.session_state.uploaded_creatives = []
+                st.error("Ошибка загрузки")
+            # st.cache_data.clear()  # Обновляет кэш
+    
+    if "uploaded_creatives" in st.session_state and st.session_state.uploaded_creatives:
+        st.subheader("Статус обработки")
+        status_table = st.empty()  # Контейнер для таблицы
+
+        all_done = False
+        while not all_done:
+            statuses = []
+            all_done = True
+
+            for cid in st.session_state.uploaded_creatives:
+                try:
+                    resp = requests.get(f"{BACKEND_URL}/status/{cid}")
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        statuses.append({
+                            "ID": cid[:8] + "...",
+                            "Оригинальное имя": data["original_filename"],
+                            "Размер": data["file_size"],
+                            "Разрешение": data["image_size"],
+                            "Время загрузки": data["upload_timestamp"],
+                            "OCR-распознавание": data["ocr_status"],
+                            "Детекция объектов": data["detection_status"],
+                            "Классификация": data["classification_status"],
+                            "Топик": data["main_topic"] or "PENDING",
+                            "Confidence": f"{data['topic_confidence']:.2f}" if data["topic_confidence"] else "PENDING",
+                            "Статус": data["overall_status"]
+                        })
+                        if data["overall_status"] not in ["SUCCESS", "ERROR"]:
+                            all_done = False
+                    else:
+                        statuses.append({"ID": cid, "Ошибка": "Не удалось получить статус"})
+                except Exception:
+                    statuses.append({"ID": cid, "Ошибка": "Сеть"})
+
+            df = pd.DataFrame(statuses)
+
+            status_table.dataframe(df, use_container_width=True, height=400)
+
+            if not all_done:
+                time.sleep(1)
+            else:
+                st.success("Все креативы обработаны!")
+                break
 
 
 # Страница: Просмотр аналитики по группе
@@ -293,8 +357,6 @@ def page_details():
         return
     
     # Табличка с креативами выбранной группы
-    # st.subheader("Креативы в группе")
-    # 'str' object has no attribute 'strftime'
     df_creatives = pd.DataFrame([
         {
             "ID": c["creative_id"],
@@ -307,17 +369,6 @@ def page_details():
         for c in creatives
     ])
     df_creatives.reset_index(drop=True, inplace=True)
-    # st.dataframe(df_creatives, use_container_width=True)
-
-    # Выбор креатива из таблицы
-    # creative_ids = df_creatives["ID"].tolist()
-    # id_to_filename = dict(zip(df_creatives['ID'], df_creatives['Оригинальное имя']))
-    # selected_creative_id = st.selectbox(
-    #     "Выберите креатив для просмотра деталей",
-    #     options=creative_ids,
-    #     format_func=lambda cid: f"{cid} — {id_to_filename[cid]}",
-    #     key="select_creative_details"
-    # )
 
     gb = GridOptionsBuilder.from_dataframe(df_creatives)
     gb.configure_default_column(editable=False, wrapText=True, autoHeight=True)
@@ -332,15 +383,14 @@ def page_details():
         update_mode=GridUpdateMode.SELECTION_CHANGED,
         height=min(300, 50 * len(df_creatives) + 50),
         theme="streamlit",
-        key="aggrid_creatives"  # Ключ обязателен
+        key="aggrid_creatives"
     )
 
-    # selected_creative_id = grid_response["selected_rows"][0]["ID"] if grid_response["selected_rows"] else None
     selected_rows = grid_response.get("selected_rows", None)
 
     if selected_rows is not None and len(selected_rows) > 0:
-        row = selected_rows.iloc[0]  # Получаем первую строку
-        selected_creative_id = row.get("ID")  # или row["ID"]
+        row = selected_rows.iloc[0]
+        selected_creative_id = row.get("ID")
 
         if not selected_creative_id:
             st.error("Не удалось получить ID креатива.")
@@ -419,7 +469,14 @@ def page_details():
 
 # Боковое меню
 st.sidebar.title("Меню")
-page = st.sidebar.radio("Выберите раздел", ["Загрузка", "Аналитика", "Детали креатива"])
+page = st.sidebar.radio(
+    "Выберите раздел", ["Загрузка", "Аналитика", "Детали креатива"], 
+    key="main_page_selector")
+
+# Очистка состояния при смене страницы
+if "last_page" in st.session_state and st.session_state.last_page != page:
+    st.session_state.pop("uploaded_creatives", None)
+st.session_state.last_page = page
 
 if page == "Загрузка":
     page_upload()

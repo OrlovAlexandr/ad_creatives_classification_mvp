@@ -5,13 +5,14 @@ from typing import List
 
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
+
 from sqlalchemy.orm import Session
 
 import database
 import tasks
 from contextlib import asynccontextmanager
 from database import SessionLocal, engine, Base
-from models import CreativeBase, CreativeDetail, UploadResponse, AnalyticsResponse
+from models import CreativeBase, CreativeDetail, UploadResponse, AnalyticsResponse, UploadRequest
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,6 +43,10 @@ async def upload_files(
     db: Session = Depends(get_db)
     ):
     """Загрузка и сохранение файлов"""
+    logger.info(
+        f"Received: group_id={group_id}, creative_ids={creative_ids}, filenames={original_filenames}"
+        )
+    
     if len(creative_ids) != len(files) or len(creative_ids) != len(original_filenames):
         raise HTTPException(
             status_code=400, 
@@ -60,8 +65,7 @@ async def upload_files(
                 continue
             
             # Уникальное имя файла — UUID
-            file_path = os.path.join("uploads", file.filename)
-
+            file_path = os.path.join("uploads", f"{creative_id}.{ext}")
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)  # TODO: сохранить на Minio
 
@@ -117,7 +121,7 @@ def get_groups(db: Session = Depends(get_db)):
 
 
 @app.get("/creatives/{creative_id}", response_model=CreativeDetail)
-def get_creative(creative_id: str, db: Session = Depends(get_db)):  # был int
+def get_creative(creative_id: str, db: Session = Depends(get_db)):
     """Детали креатива"""
     logger.info(f"GET /creatives/{creative_id}")
 
@@ -133,8 +137,8 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):  # был int
 
     logger.info(f"Creative {creative_id} found")
     if analysis:
-        logger.info(f"Статус анализа: {analysis.analysis_status}")
-        if analysis.analysis_status == "ERROR":
+        logger.info(f"Статус анализа: {analysis.overall_status}")
+        if analysis.overall_status == "ERROR":
             raise HTTPException(status_code=500, detail="Ошибка анализа")
     else:
         raise HTTPException(status_code=404, detail="Анализ не нашелся")
@@ -148,33 +152,34 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):  # был int
         "file_format": creative.file_format,
         "image_width": creative.image_width,
         "image_height": creative.image_height,
-        "upload_timestamp": creative.upload_timestamp.isoformat()  # ← преобразуем в строку
+        "upload_timestamp": creative.upload_timestamp.isoformat()
     }
 
-    if analysis and analysis.analysis_status == "SUCCESS":
+    if analysis and analysis.overall_status == "SUCCESS":
         analysis_data = {
             "dominant_colors": analysis.dominant_colors,
             "ocr_text": analysis.ocr_text,
             "ocr_blocks": analysis.ocr_blocks,
-            "text_topics": analysis.text_topics,
             "detected_objects": analysis.detected_objects,
-            "main_topic": analysis.main_topic
+            "main_topic": analysis.main_topic,
+            "topic_confidence": analysis.topic_confidence
         }
     else:
         analysis_data = None
 
     # Конвертация ORM в Pydantic
     result = CreativeBase(**creative_data) 
-    # result = CreativeBase.model_validate(creative)
     return CreativeDetail(**result.model_dump(), analysis=analysis_data)
 
 
 @app.get("/groups/{group_id}/creatives")
 def get_creatives_by_group(group_id: str, db: Session = Depends(get_db)):
     """Возвращает список креативов в группе с данными и результатом анализа"""
+    
     creatives = db.query(database.Creative).filter(
         database.Creative.group_id == group_id
         ).all()
+
     result = []
     for c in creatives:
         analysis = db.query(database.CreativeAnalysis).filter(
@@ -190,18 +195,58 @@ def get_creatives_by_group(group_id: str, db: Session = Depends(get_db)):
             "image_width": c.image_width,
             "image_height": c.image_height,
             "upload_timestamp": c.upload_timestamp.isoformat(),
-            "analysis": analysis is not None and analysis.analysis_status == "SUCCESS"
+            "analysis": analysis is not None and analysis.overall_status == "SUCCESS"
         })
     return result
 
 
+@app.get("/status/{creative_id}")
+def get_status(creative_id: str, db: Session = Depends(get_db)):
+    """Возвращает статус обработки креатива"""
+    analysis = db.query(database.CreativeAnalysis).filter(
+        database.CreativeAnalysis.creative_id == creative_id).first()
+    creative = db.query(database.Creative).filter(
+        database.Creative.creative_id == creative_id).first()
+
+    if not creative:
+        raise HTTPException(status_code=404, detail="Креатив не найден")
+
+    if not analysis:
+        return {
+            "creative_id": creative_id,
+            "original_filename": creative.original_filename,
+            "file_size": f"{creative.file_size} байт",
+            "image_size": f"{creative.image_width}x{creative.image_height}",
+            "upload_timestamp": creative.upload_timestamp.isoformat(),
+            "ocr_status": "PENDING",
+            "detection_status": "PENDING",
+            "classification_status": "PENDING",
+            "overall_status": "PENDING",
+            "main_topic": None,
+            "topic_confidence": None
+        }
+
+    return {
+        "creative_id": creative_id,
+        "original_filename": creative.original_filename,
+        "file_size": f"{creative.file_size} байт",
+        "image_size": f"{creative.image_width}×{creative.image_height}",
+        "upload_timestamp": creative.upload_timestamp.isoformat(),
+        "ocr_status": analysis.ocr_status,
+        "detection_status": analysis.detection_status,
+        "classification_status": analysis.classification_status,
+        "overall_status": analysis.overall_status,
+        "main_topic": analysis.main_topic,
+        "topic_confidence": analysis.topic_confidence
+    }
+
+
 @app.get("/analytics/group/{group_id}", response_model=AnalyticsResponse)
-def get_analytics(group_id: str, db: Session = Depends(get_db)):  # был int
+def get_analytics(group_id: str, db: Session = Depends(get_db)):
     """
     Аналитика группы креативов.
     TODO: продумать что показывать в аналитике, и что возвращать на фронт
     """
-
     # Поиск и проверка группы
     creatives = db.query(database.Creative).filter(database.Creative.group_id == group_id).all()
     if not creatives:
@@ -209,7 +254,7 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):  # был int
 
     analyses = db.query(database.CreativeAnalysis).join(database.Creative).filter(
         database.Creative.group_id == group_id,
-        database.CreativeAnalysis.analysis_status == "SUCCESS"
+        database.CreativeAnalysis.overall_status == "SUCCESS"
     ).all()
 
     total = len(analyses)
@@ -231,9 +276,8 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):  # был int
             avg_obj_conf += sum(confs) / len(confs)
 
         # Топики
-        if a.text_topics:
-            main = max(a.text_topics, key=lambda x: x["confidence"])
-            topic = main["topic"]
+        if a.main_topic:
+            topic = a.main_topic
             topics[topic] = topics.get(topic, 0) + 1
 
         # Цвета
