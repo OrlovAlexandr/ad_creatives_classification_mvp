@@ -117,6 +117,8 @@ def get_groups(db: Session = Depends(get_db)):
             "count": count,
             "created_at": first[0].isoformat() if first else None
         })
+
+    result.sort(key=lambda x: x["created_at"] or "", reverse=True)  # Сортировка
     return result
 
 
@@ -217,7 +219,7 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
             "original_filename": creative.original_filename,
             "file_size": f"{creative.file_size} байт",
             "image_size": f"{creative.image_width}x{creative.image_height}",
-            "upload_timestamp": creative.upload_timestamp.isoformat(),
+            "upload_timestamp": creative.upload_timestamp.isoformat().split(".")[0].replace("T", " "),
             "ocr_status": "PENDING",
             "detection_status": "PENDING",
             "classification_status": "PENDING",
@@ -231,7 +233,7 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
         "original_filename": creative.original_filename,
         "file_size": f"{creative.file_size} байт",
         "image_size": f"{creative.image_width}×{creative.image_height}",
-        "upload_timestamp": creative.upload_timestamp.isoformat(),
+        "upload_timestamp": creative.upload_timestamp.isoformat().split(".")[0].replace("T", " "),
         "ocr_status": analysis.ocr_status,
         "detection_status": analysis.detection_status,
         "classification_status": analysis.classification_status,

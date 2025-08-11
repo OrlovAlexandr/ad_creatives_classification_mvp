@@ -186,6 +186,20 @@ def fetch_creatives_by_group(group_id: str) -> Optional[list]:
             return []    
 
 
+def style_status(val):
+    if val == "SUCCESS":
+        return "background-color: #d4edda; color: #155724"
+    elif "PROCESS" in str(val):
+        return "background-color: #fff3cd; color: #856404"
+    elif val == "PENDING":
+        return "background-color: #f8f9fa; color: #6c757d"
+    elif val == "ERROR":
+        return "background-color: #f8d7da; color: #721c24"
+    return ""
+
+def style_topic(val):
+    return "font-weight: bold; font-size: 15px"
+
 # Страница: Загрузка креативов
 def page_upload():
     st.header("Загрузка креативов")
@@ -260,7 +274,16 @@ def page_upload():
 
             df = pd.DataFrame(statuses)
 
-            status_table.dataframe(df, use_container_width=True, height=400)
+            # status_table.dataframe(df, use_container_width=True, height=400)
+            styled_df = df.style.map(style_status, subset=[
+                "OCR-распознавание",
+                "Детекция объектов",
+                "Классификация",
+                "Статус"
+            ]).map(style_topic, subset=["Топик"])
+
+            status_table.dataframe(styled_df, use_container_width=True)
+
 
             if not all_done:
                 time.sleep(1)
@@ -284,14 +307,14 @@ def page_analytics():
 
     group_display_map = {g["group_id"]: g["display_name"] for g in groups}
     group_ids = list(group_display_map.keys())
-    # group_options = [(g["display_name"], g["group_id"]) for g in groups]
-    # display_names = [item[0] for item in group_options]
-    # group_ids = [item[1] for item in group_options]
+
+    default_index = 0 if group_ids else None  # бэк уже сортирует
 
     selected = st.selectbox(
         "Выберите группу",
         options=group_ids,
         format_func=lambda gid: group_display_map[gid],
+        index=default_index,
         key="selected_group_analytics"
     )
 
@@ -338,11 +361,14 @@ def page_details():
     group_display_map = {g["group_id"]: g["display_name"] for g in groups}
     group_ids = list(group_display_map.keys())
 
+    default_index = 0 if group_ids else None  # бэк уже сортирует
+
     selected_group = st.selectbox(
         "Выберите группу",
         options=group_ids,
         format_func=lambda gid: group_display_map[gid],
-        key="select_group_details"
+        index=default_index,
+        key="selected_group_analytics"
     )
 
     if not selected_group:
