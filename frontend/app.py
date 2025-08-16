@@ -21,6 +21,14 @@ load_dotenv()
 USE_MOCK = False  # использовать mock-данные вместо реального бэкенда
 BACKEND_URL = os.getenv("BACKEND_URL") if not USE_MOCK else "http://localhost:8000"
 
+TOPIC_TRANSLATIONS = {
+    'tableware': 'Столовые приборы',
+    'ties': 'Галстуки',
+    'bags': 'Сумки',
+    'cups': 'Чашки',
+    'clocks': 'Часы'
+}
+
 st.set_page_config(page_title="Классификатор креативов", layout="wide")
 
 
@@ -265,6 +273,12 @@ def page_upload():
                     resp = requests.get(f"{BACKEND_URL}/status/{cid}")
                     if resp.status_code == 200:
                         data = resp.json()
+
+                        original_topic = data["main_topic"]
+                        translated_topic = TOPIC_TRANSLATIONS.get(
+                            original_topic, original_topic
+                            ) if original_topic else "PENDING"
+                        
                         statuses.append({
                             "ID": cid[:8] + "...",
                             "Оригинальное имя": data["original_filename"],
@@ -274,7 +288,7 @@ def page_upload():
                             "OCR-распознавание": data["ocr_status"],
                             "Детекция объектов": data["detection_status"],
                             "Классификация": data["classification_status"],
-                            "Топик": data["main_topic"] or "PENDING",
+                            "Топик": translated_topic or "PENDING",
                             "Confidence": f"{data['topic_confidence']:.2f}" if data["topic_confidence"] else "PENDING",
                             "Статус": data["overall_status"]
                         })
@@ -351,13 +365,21 @@ def page_analytics():
             if not topics:
                 st.info("Нет данных о тематиках.")
             else:
-                df_topics = pd.DataFrame(topics)
+                translated_topics = []
+                for topic_data in topics:
+                    original_topic = topic_data.get("topic", "")
+                    translated_topic = TOPIC_TRANSLATIONS.get(original_topic, original_topic)
+                    translated_item = topic_data.copy()
+                    translated_item["topic"] = translated_topic
+                    translated_topics.append(translated_item)
+
+                df_topics = pd.DataFrame(translated_topics)
                 if "topic" in df_topics.columns:
                     st.bar_chart(df_topics.set_index("topic")["count"])
                 else:
                     st.error("Ошибка: в данных нет колонки 'topic'.")
                     st.write("Доступные колонки:", df_topics.columns.tolist())
-                    st.write("Пример данных:", topics)
+                    st.write("Пример данных:", translated_topics)
 
             st.subheader("Цвета")
             colors = [c["hex"] for c in data["dominant_colors"]]
@@ -489,8 +511,12 @@ def page_details():
         st.write(f"**Размеры:** {data['image_width']}x{data['image_height']}")
         st.write(f"**Дата загрузки:** {data['upload_timestamp']}")
 
-        main_topic = data.get('analysis', {}).get('main_topic', '—')
-        st.write(f"**Основная тема:** {main_topic}")
+        orig_topic = data.get('analysis', {}).get('main_topic', '—')
+        translated_topic = TOPIC_TRANSLATIONS.get(
+            orig_topic, orig_topic
+            ) if orig_topic != '—' else orig_topic
+
+        st.write(f"**Основная тема:** {translated_topic}")
 
         ocr_text = data.get('analysis', {}).get('ocr_text', '—')
         st.subheader("Распознанный текст")
