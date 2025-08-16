@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, Optional
 import uuid
 import time
+import io
 
 import pandas as pd
 import requests
@@ -11,6 +12,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from icecream import ic
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from PIL import Image
 # from st_aggrid.shared import JsCode
 
 from visualizer import draw_bounding_boxes
@@ -18,8 +20,13 @@ from visualizer import draw_bounding_boxes
 load_dotenv()
 
 # Настройки
-USE_MOCK = False  # использовать mock-данные вместо реального бэкенда
-BACKEND_URL = os.getenv("BACKEND_URL") if not USE_MOCK else "http://localhost:8000"
+BACKEND_URL = os.getenv("BACKEND_URL")
+
+# Настройки для отображения миниатюр
+THUMBNAIL_WIDTH = 120
+ESTIMATED_CONTENT_WIDTH = 1000
+MAX_COLUMNS = 10
+MIN_COLUMNS = 1
 
 TOPIC_TRANSLATIONS = {
     'tableware': 'Столовые приборы',
@@ -44,43 +51,25 @@ def generate_creative_id():
 @st.cache_data(ttl=600)
 def fetch_groups():
     """Получает список групп креативов с бэкенда (или из mock)"""
-    if USE_MOCK:
-        try:
-            with open("mocks/groups.json", "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            for g in raw:
-                try:
-                    # Извлекаем временную метку из grp_20250807_143000_abc123
-                    ts_part = g["group_id"].split('_', 3)[:3]  # ['grp', '20250807', '143000']
-                    dt_str = f"{ts_part[1]}_{ts_part[2]}"
-                    dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
-                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M:%S")
-                except:
-                    g["display_name"] = g["group_id"]
-            return raw
-        except Exception as e:
-            st.error(f"Ошибка загрузки mock-данных: {e}")
-            return []
-    else:
-        try:
-            # st.write(f"Запрос к: {BACKEND_URL}/groups")  # ← DEBUG
-            response = requests.get(f"{BACKEND_URL}/groups")
-            # st.write("Ответ /groups:", response.status_code, response.text)  # ← DEBUG
-            response.raise_for_status()
-            raw = response.json()
-            
-            for g in raw:
-                try:
-                    ts_part = g["group_id"].split('_', 3)[:3]
-                    dt_str = f"{ts_part[1]}_{ts_part[2]}"
-                    dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
-                    g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M:%S")
-                except:
-                    g["display_name"] = g["group_id"]
-            return raw
-        except Exception:
-            st.error("Бэкенд недоступен. Включён режим имитации.")
-            return fetch_groups_mock()
+    try:
+        # st.write(f"Запрос к: {BACKEND_URL}/groups")  # ← DEBUG
+        response = requests.get(f"{BACKEND_URL}/groups")
+        # st.write("Ответ /groups:", response.status_code, response.text)  # ← DEBUG
+        response.raise_for_status()
+        raw = response.json()
+        
+        for g in raw:
+            try:
+                ts_part = g["group_id"].split('_', 3)[:3]
+                dt_str = f"{ts_part[1]}_{ts_part[2]}"
+                dt = datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
+                g["display_name"] = dt.strftime("Группа %d.%m.%Y %H:%M:%S")
+            except:
+                g["display_name"] = g["group_id"]
+        return raw
+    except Exception:
+        st.error("Бэкенд недоступен. Включён режим имитации.")
+        return fetch_groups_mock()
 
 
 def fetch_groups_mock():
@@ -91,107 +80,77 @@ def fetch_groups_mock():
     ]
 
 
-def upload_files(files, group_id: str, creative_ids: list[str]):
+def upload_files(files, group_id: str, creative_ids: list[str], original_filenames: list[str]):
     """Отправляет файлы на бэкенд в указанную группу."""
-    if USE_MOCK:
-        st.success(f"Загрузка успешна (режим имитации). Группа: {group_id}, файлов: {len(files)}")
-        return {"uploaded": len(files), "group_id": group_id, "errors": []}
-    else:
-        try:
-            url = f"{BACKEND_URL}/upload"
-            files_data = []
+    try:
+        url = f"{BACKEND_URL}/upload"
+        files_data = []
 
-            original_filenames = [f.name for f in files]
+        # original_filenames = [f.name for f in files]
 
-            for file, cid in zip(files, creative_ids):
-                ext = file.name.split(".")[-1].lower()
-                filename = f"{cid}.{ext}"  # Называем файлы по ID креатива
-                files_data.append(("files", (filename, file, file.type)))
+        for file, cid in zip(files, creative_ids):
+            ext = file.name.split(".")[-1].lower()
+            filename = f"{cid}.{ext}"  # Называем файлы по ID креатива
+            files_data.append(("files", (filename, file, file.type)))
 
-            # import json as json_module
-            data = {
-                "group_id": group_id,
-                # "creative_ids": creative_ids,
-                # "original_filenames": original_filenames
-            }
-            for i, cid in enumerate(creative_ids):
-                data[f"creative_ids"] = creative_ids  # FastAPI автоматически соберёт список
-            for i, name in enumerate(original_filenames):
-                data[f"original_filenames"] = original_filenames
-                
-            response = requests.post(
-                url, 
-                files=files_data, 
-                data=data,
-                )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            st.error(f"Ошибка загрузки: {e}")
-            return None
+        # import json as json_module
+        data = {
+            "group_id": group_id,
+            # "creative_ids": creative_ids,
+            # "original_filenames": original_filenames
+        }
+        for i, cid in enumerate(creative_ids):
+            data[f"creative_ids"] = creative_ids  # FastAPI автоматически соберёт список
+        for i, name in enumerate(original_filenames):
+            # data[f"original_filenames"] = original_filenames
+            data.setdefault("original_filenames", []).append(name)
+            
+        response = requests.post(
+            url, 
+            files=files_data, 
+            data=data,
+            )
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Ошибка загрузки: {e}")
+        return None
 
 
 @st.cache_data(ttl=30)
 def fetch_creative_details(creative_id: str) -> Optional[Dict]:  # был int
     """Получает детали креатива с бэкенда (или из mock)"""
-    if USE_MOCK:
-        try:
-            with open(f"mocks/creative_{creative_id}.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except FileNotFoundError:
-            st.error(f"Mock для креатива {creative_id} не найден")
-            return None
-        except Exception as e:
-            st.error(f"Ошибка: {e}")
-            return None
-    else:
-        try:
-            response = requests.get(f"{BACKEND_URL}/creatives/{creative_id}")
-            response.raise_for_status()
-            # data = response.json()  # для отладки
-            # st.json(data)  # для отладки, выводит полученные данные на страницу
-            return response.json()
-        except Exception as e:
-            st.error(f"Ошибка загрузки креатива {creative_id}: {e}")
-            return None
+    try:
+        response = requests.get(f"{BACKEND_URL}/creatives/{creative_id}")
+        response.raise_for_status()
+        # data = response.json()  # для отладки
+        # st.json(data)  # для отладки, выводит полученные данные на страницу
+        return response.json()
+    except Exception as e:
+        st.error(f"Ошибка загрузки креатива {creative_id}: {e}")
+        return None
 
 
 def fetch_analytics(group_id):
     """Получает аналитику по группе креативов с бэкенда (или из mock)"""
-    if USE_MOCK:
-        try:
-            with open(f"mocks/analytics_group_{group_id}.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except:
-            st.error(f"Mock для аналитики группы {group_id} не найден")
-            return None
-    else:
-        try:
-            response = requests.get(f"{BACKEND_URL}/analytics/group/{group_id}")
-            response.raise_for_status()
-            return response.json()
-        except:
-            st.error("Ошибка загрузки аналитики")
-            return None
+    try:
+        response = requests.get(f"{BACKEND_URL}/analytics/group/{group_id}")
+        response.raise_for_status()
+        return response.json()
+    except:
+        st.error("Ошибка загрузки аналитики")
+        return None
 
 
 def fetch_creatives_by_group(group_id: str) -> Optional[list]:
     """Получает список креативов по ID группы"""
-    if USE_MOCK:
-        try:
-            with open(f"mocks/creatives_group_{group_id}.json", "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            st.warning(f"Mock для креативов группы {group_id} не найден: {e}")
-            return []
-    else:
-        try:
-            response = requests.get(f"{BACKEND_URL}/groups/{group_id}/creatives")
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            st.error(f"Ошибка загрузки креативов группы {group_id}: {e}")
-            return []    
+    try:
+        response = requests.get(f"{BACKEND_URL}/groups/{group_id}/creatives")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Ошибка загрузки креативов группы {group_id}: {e}")
+        return []    
 
 
 def style_status(val):
@@ -206,6 +165,60 @@ def style_status(val):
 def style_topic(val):
     return "font-weight: bold; font-size: 15px"
 
+
+def calculate_columns(thumb_width: int, estimated_width: int, min_cols: int, max_cols: int) -> int:
+    calculated_cols = estimated_width // thumb_width
+    return max(min_cols, min(calculated_cols, max_cols))
+
+def display_uploaded_thumbnails(files_list):
+    if not files_list:
+        st.info("Файлы не выбраны.")
+        return
+
+    num_columns = calculate_columns(THUMBNAIL_WIDTH, ESTIMATED_CONTENT_WIDTH, MIN_COLUMNS, MAX_COLUMNS)
+
+    total_files = len(files_list)
+    files_to_remove_indices = []
+
+    for i in range(0, total_files, num_columns):
+        cols = st.columns(num_columns) 
+        for j in range(num_columns):
+            idx = i + j
+            if idx < total_files: 
+                uploaded_file_obj = files_list[idx]
+                file_unique_id = uploaded_file_obj.get("unique_id")
+                
+                with cols[j]: 
+                    try:
+                        # st.text(uploaded_file_obj["name"][:20]) 
+                        st.markdown(f"<small>{uploaded_file_obj['name'][:20]}</small>", unsafe_allow_html=True)
+                        
+                        if (uploaded_file_obj["type"] and 
+                            uploaded_file_obj["type"].startswith('image/')):
+                            image_bytes = uploaded_file_obj["file_obj"].getvalue() 
+                            image = Image.open(io.BytesIO(image_bytes))
+                            image.thumbnail((THUMBNAIL_WIDTH, THUMBNAIL_WIDTH * 2)) # Ограничиваем высоту
+                            st.image(image, width=THUMBNAIL_WIDTH) 
+                        else:
+                            st.info(f"Файл: {uploaded_file_obj['type'] or 'Неизвестный тип'}")
+                        
+                        if st.button("Удалить", key=f"del_btn_{file_unique_id}"):
+                            files_to_remove_indices.append(idx)
+                            
+                    except Exception as e:
+                        st.error(f"Ошибка отображения {uploaded_file_obj['name']}: {e}")
+            else:
+                with cols[j]:
+                    st.empty() 
+
+    if files_to_remove_indices:
+        files_to_remove_indices.sort(reverse=True)
+        for idx in files_to_remove_indices:
+            if 0 <= idx < len(st.session_state.selected_files):
+                st.session_state.selected_files.pop(idx)
+        
+        st.rerun() 
+
 # Страница: Загрузка креативов
 def page_upload():
     st.header("Загрузка креативов")
@@ -215,54 +228,76 @@ def page_upload():
     
     st.text(f"Текущая группа: {st.session_state.current_group_id}")
 
-    uploaded_files = st.file_uploader(
-        "Выберите изображения (JPG, PNG, WebP)",
-        type=["jpg", "jpeg", "png", "webp"],
-        accept_multiple_files=True,
-        help="Поддерживаемые форматы: JPG, PNG, WebP. Макс. 10 файлов."
-    )
-
-    # Кнопка загрузки
-def page_upload():
-    st.header("Загрузка креативов")
-
-    if "current_group_id" not in st.session_state:
-        st.session_state.current_group_id = generate_group_id()
+    if "selected_files" not in st.session_state:
+        st.session_state.selected_files = []
     
-    st.text(f"Текущая группа: {st.session_state.current_group_id}")
+    if "uploader_key" not in st.session_state:
+        st.session_state.uploader_key = str(uuid.uuid4())
 
-    uploaded_files = st.file_uploader(
+    # File uploader
+    new_uploads = st.file_uploader(
         "Выберите изображения (JPG, PNG, WebP)",
         type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
-        help="Поддерживаемые форматы: JPG, PNG, WebP. Макс. 10 файлов."
+        key=st.session_state.uploader_key, # Используем динамический ключ
+        help="Поддерживаемые форматы: JPG, PNG, WebP. Можете выбрать несколько файлов."
     )
 
-    # Кнопка загрузки
-    if uploaded_files and st.button("Загрузить", key="upload_btn"):
-        with st.spinner("Идёт загрузка и обработка..."):
-            creative_ids = [generate_creative_id() for _ in uploaded_files]
-            result = upload_files(uploaded_files, st.session_state.current_group_id, creative_ids)
+    if new_uploads:
+        added_any = False
+        existing_names = {f["name"] for f in st.session_state.selected_files}
+        for file in new_uploads:
+            if file.name not in existing_names:
+                unique_id = str(uuid.uuid4())
+                st.session_state.selected_files.append({
+                    "unique_id": unique_id,
+                    "name": file.name,
+                    "type": file.type,
+                    "size": file.size,
+                    "file_obj": file
+                })
+                existing_names.add(file.name)
+                added_any = True
+        
+        if added_any:
+            st.session_state.uploader_key = str(uuid.uuid4())
+            st.rerun()
 
+    st.subheader("Выбранные файлы")
+    display_uploaded_thumbnails(st.session_state.selected_files)
+
+    # Кнопка загрузки
+    if st.session_state.selected_files and st.button("Загрузить", key="upload_btn"):
+        with st.spinner("Идёт загрузка и обработка..."):
+            files_for_upload = []
+            creative_ids = []
+            original_filenames = []
+
+            for file_info in st.session_state.selected_files:
+                file_obj = file_info["file_obj"]
+                file_obj.seek(0) 
+                files_for_upload.append(file_obj)
+                creative_ids.append(generate_creative_id())
+                original_filenames.append(file_info["name"])
+
+            result = upload_files(files_for_upload, st.session_state.current_group_id, creative_ids, original_filenames)
             if result:
                 st.success(
                     f"Успешно загружено {result['uploaded']} файлов в группу {st.session_state.current_group_id}"
-                    )
+                )
                 st.session_state.uploaded_creatives = creative_ids
-                st.session_state.pop("current_group_id", None)
-
+                # Очищаем список выбранных файлов после успешной загрузки
+                st.session_state.selected_files = [] 
+                # Также сбрасываем ключ виджета на всякий случай
+                st.session_state.uploader_key = str(uuid.uuid4())
                 fetch_groups.clear()
-
-                # st.json(result)  # ответ бэкенда
                 st.rerun()
             else:
-                # st.session_state.uploaded_creatives = []
                 st.error("Ошибка загрузки")
-            # st.cache_data.clear()  # Обновляет кэш
-    
+
     if "uploaded_creatives" in st.session_state and st.session_state.uploaded_creatives:
         st.subheader("Статус обработки")
-        status_table = st.empty()  # Контейнер для таблицы
+        status_table = st.empty()
         while True:
             statuses = []
             finished_count = 0 
@@ -284,7 +319,7 @@ def page_upload():
                             "Оригинальное имя": data["original_filename"],
                             "Размер": data["file_size"],
                             "Разрешение": data["image_size"],
-                            "Время загрузки": data["upload_timestamp"],
+                            "Время загрузки": data["upload_timestamp"].split(".")[0].replace("T", " "),
                             "OCR-распознавание": data["ocr_status"],
                             "Детекция объектов": data["detection_status"],
                             "Классификация": data["classification_status"],
@@ -309,14 +344,12 @@ def page_upload():
                 "Статус"
             ]).map(style_topic, subset=["Топик"])
             status_table.dataframe(styled_df, use_container_width=True)
-
-
             # st.write(f"DEBUG: finished_count = {finished_count}, total_count = {total_count}") #  Временный вывод
             
             if finished_count == total_count and total_count > 0:
                 st.success("Все креативы обработаны!")
                 st.session_state.uploaded_creatives = [] 
-                st.info("Мониторинг остановлен.")
+                # st.info("Мониторинг остановлен.")
                 return 
             else:
                 time.sleep(1)
