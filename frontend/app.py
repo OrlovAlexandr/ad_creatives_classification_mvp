@@ -123,7 +123,7 @@ def upload_files(files, group_id: str, creative_ids: list[str]):
             return None
 
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=30)
 def fetch_creative_details(creative_id: str) -> Optional[Dict]:  # был int
     """Получает детали креатива с бэкенда (или из mock)"""
     if USE_MOCK:
@@ -187,20 +187,34 @@ def fetch_creatives_by_group(group_id: str) -> Optional[list]:
 
 
 def style_status(val):
-    if val == "SUCCESS":
+    if "SUCCESS" in str(val):
         return "background-color: #d4edda; color: #155724"
-    elif "PROCESS" in str(val):
+    elif "PROCESSING" in str(val):
         return "background-color: #fff3cd; color: #856404"
     elif val == "PENDING":
         return "background-color: #f8f9fa; color: #6c757d"
-    elif val == "ERROR":
-        return "background-color: #f8d7da; color: #721c24"
     return ""
 
 def style_topic(val):
     return "font-weight: bold; font-size: 15px"
 
 # Страница: Загрузка креативов
+def page_upload():
+    st.header("Загрузка креативов")
+
+    if "current_group_id" not in st.session_state:
+        st.session_state.current_group_id = generate_group_id()
+    
+    st.text(f"Текущая группа: {st.session_state.current_group_id}")
+
+    uploaded_files = st.file_uploader(
+        "Выберите изображения (JPG, PNG, WebP)",
+        type=["jpg", "jpeg", "png", "webp"],
+        accept_multiple_files=True,
+        help="Поддерживаемые форматы: JPG, PNG, WebP. Макс. 10 файлов."
+    )
+
+    # Кнопка загрузки
 def page_upload():
     st.header("Загрузка креативов")
 
@@ -241,12 +255,11 @@ def page_upload():
     if "uploaded_creatives" in st.session_state and st.session_state.uploaded_creatives:
         st.subheader("Статус обработки")
         status_table = st.empty()  # Контейнер для таблицы
-
-        all_done = False
-        while not all_done:
+        while True:
             statuses = []
-            all_done = True
-
+            finished_count = 0 
+            total_count = len(st.session_state.uploaded_creatives)
+            
             for cid in st.session_state.uploaded_creatives:
                 try:
                     resp = requests.get(f"{BACKEND_URL}/status/{cid}")
@@ -265,31 +278,34 @@ def page_upload():
                             "Confidence": f"{data['topic_confidence']:.2f}" if data["topic_confidence"] else "PENDING",
                             "Статус": data["overall_status"]
                         })
-                        if data["overall_status"] not in ["SUCCESS", "ERROR"]:
-                            all_done = False
+                        if str(data["overall_status"]).startswith(("SUCCESS", "ERROR")):
+                            finished_count += 1
                     else:
-                        statuses.append({"ID": cid, "Ошибка": "Не удалось получить статус"})
-                except Exception:
-                    statuses.append({"ID": cid, "Ошибка": "Сеть"})
+                        statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Статус {resp.status_code}"})
+                except requests.exceptions.RequestException as e:
+                    statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Сеть: {type(e).__name__}"})
+                except Exception as e:
+                    statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Ошибка: {type(e).__name__}"})
 
             df = pd.DataFrame(statuses)
-
-            # status_table.dataframe(df, use_container_width=True, height=400)
             styled_df = df.style.map(style_status, subset=[
                 "OCR-распознавание",
                 "Детекция объектов",
                 "Классификация",
                 "Статус"
             ]).map(style_topic, subset=["Топик"])
-
             status_table.dataframe(styled_df, use_container_width=True)
 
 
-            if not all_done:
-                time.sleep(1)
-            else:
+            # st.write(f"DEBUG: finished_count = {finished_count}, total_count = {total_count}") #  Временный вывод
+            
+            if finished_count == total_count and total_count > 0:
                 st.success("Все креативы обработаны!")
-                break
+                st.session_state.uploaded_creatives = [] 
+                st.info("Мониторинг остановлен.")
+                return 
+            else:
+                time.sleep(1)
 
 
 # Страница: Просмотр аналитики по группе
@@ -428,9 +444,22 @@ def page_details():
             data = fetch_creative_details(selected_creative_id)
 
         if not data:
-            st.error("Не удалось загрузить данные креатива.")
+            st.error("Не удалось загрузить данные креатива или данные некорректны.")
+            if st.button("Повторить попытку"):
+                st.rerun()
             return
-        
+
+        analysis_data = data.get("analysis")
+        if not analysis_data:
+            st.warning("Данные анализа креатива еще не готовы или произошла ошибка при обработке.")
+            if st.button("Повторить попытку"):
+                st.rerun()
+            st.image(data.get("file_path"), caption="Оригинал", width=300)
+            st.subheader(f"Детали креатива: {selected_creative_id}")
+            st.write(f"**Файл:** {data.get('original_filename', 'N/A')}")
+            st.write(f"**Размер:** {data.get('file_size', 'N/A')} байт")
+            return
+
         st.divider()
         st.subheader(f"Детали креатива: {selected_creative_id}")
 

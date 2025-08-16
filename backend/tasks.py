@@ -56,11 +56,13 @@ def process_creative(self, creative_id: str):
             db.add(analysis)
 
         analysis.overall_status = "PROCESSING"
-        db.commit()
+        # db.commit()  # Расскоментировать, если будет затрачиваться время на старт обработки
 
         # 1 - OCR
         analysis.ocr_status = "PROCESSING"
+        analysis.ocr_started_at = datetime.utcnow()        
         db.commit()
+        
         time.sleep(random.uniform(0.5, 3.0))
         topic = random.choice(TOPICS)
         full_text = TOPIC_TEXTS[topic]
@@ -81,10 +83,17 @@ def process_creative(self, creative_id: str):
         analysis.ocr_text = full_text
         analysis.ocr_blocks = blocks
         analysis.ocr_status = "SUCCESS"
+
+        analysis.ocr_сompleted_at = datetime.utcnow()
+        analysis.ocr_duration = (
+            analysis.ocr_сompleted_at - analysis.ocr_started_at
+            ).total_seconds()
         
         # 2 - Детекция объектов
         analysis.detection_status = "PROCESSING"
+        analysis.detection_started_at = datetime.utcnow()
         db.commit()
+
         time.sleep(random.uniform(0.5, 3.0))
         num_objects = random.randint(2, 6)
         detected_objects = []
@@ -103,15 +112,27 @@ def process_creative(self, creative_id: str):
         analysis.detected_objects = detected_objects
         analysis.detection_status = "SUCCESS"
 
+        analysis.detection_сompleted_at = datetime.utcnow()
+        analysis.detection_duration = (
+            analysis.detection_сompleted_at - analysis.detection_started_at
+            ).total_seconds()
+
 
         # 3 - Классификация
         analysis.classification_status = "PROCESSING"
+        analysis.classification_started_at = datetime.utcnow()
         db.commit()
+
         time.sleep(random.uniform(0.5, 3.0))
         topic_confidence = round(random.uniform(0.6, 0.95), 2)
         analysis.main_topic = topic
         analysis.topic_confidence = topic_confidence
         analysis.classification_status = "SUCCESS"
+
+        analysis.classification_сompleted_at = datetime.utcnow()
+        analysis.classification_duration = (
+            analysis.classification_сompleted_at - analysis.classification_started_at
+            ).total_seconds()
 
         # Доминирующие цвета
         analysis.dominant_colors = get_dominant_colors(creative.file_path, n_colors=3)
@@ -119,6 +140,9 @@ def process_creative(self, creative_id: str):
         # Завершение
         analysis.overall_status = "SUCCESS"
         analysis.analysis_timestamp = datetime.utcnow()
+        analysis.total_duration = (
+            analysis.analysis_timestamp - analysis.ocr_started_at
+        ).total_seconds()
         db.commit()
 
         return {"status": "success", "creative_id": creative_id}

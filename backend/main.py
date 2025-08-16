@@ -2,6 +2,7 @@ import logging
 import os
 import shutil
 from typing import List
+from datetime import datetime
 
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
@@ -212,35 +213,70 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
 
     if not creative:
         raise HTTPException(status_code=404, detail="Креатив не найден")
-
-    if not analysis:
-        return {
-            "creative_id": creative_id,
-            "original_filename": creative.original_filename,
-            "file_size": f"{creative.file_size} байт",
-            "image_size": f"{creative.image_width}x{creative.image_height}",
-            "upload_timestamp": creative.upload_timestamp.isoformat().split(".")[0].replace("T", " "),
-            "ocr_status": "PENDING",
-            "detection_status": "PENDING",
-            "classification_status": "PENDING",
-            "overall_status": "PENDING",
-            "main_topic": None,
-            "topic_confidence": None
+    
+    # Конфигурация этапов
+    stages = [
+        {
+            "name": "ocr",
+            "status": "ocr_status",
+            "started": "ocr_started_at",
+            "completed": "ocr_completed_at",
+            "duration": "ocr_duration"
+        },
+        {
+            "name": "detection",
+            "status": "detection_status",
+            "started": "detection_started_at",
+            "completed": "detection_completed_at",
+            "duration": "detection_duration"
+        },
+        {
+            "name": "classification",
+            "status": "classification_status",
+            "started": "classification_started_at",
+            "completed": "classification_completed_at",
+            "duration": "classification_duration"
         }
-
-    return {
+    ]
+    
+    def format_status_with_time(status, started, completed, duration):
+        if status == "SUCCESS" and duration is not None:
+            return f"SUCCESS ({duration:.1f} sec)"
+        elif status == "PROCESSING" and started:
+            elapsed = (datetime.utcnow() - started).total_seconds()
+            return f"PROCESSING ({elapsed:.1f} sec)"
+        return status
+    
+    result = {
         "creative_id": creative_id,
         "original_filename": creative.original_filename,
         "file_size": f"{creative.file_size} байт",
-        "image_size": f"{creative.image_width}×{creative.image_height}",
-        "upload_timestamp": creative.upload_timestamp.isoformat().split(".")[0].replace("T", " "),
-        "ocr_status": analysis.ocr_status,
-        "detection_status": analysis.detection_status,
-        "classification_status": analysis.classification_status,
-        "overall_status": analysis.overall_status,
-        "main_topic": analysis.main_topic,
-        "topic_confidence": analysis.topic_confidence
+        "image_size": f"{creative.image_width}x{creative.image_height}",
+        "upload_timestamp": creative.upload_timestamp.isoformat(),
+        "main_topic": analysis.main_topic if analysis else None,
+        "topic_confidence": analysis.topic_confidence if analysis else None
     }
+
+    for stage in stages:
+        status_val = getattr(analysis, stage["status"], "PENDING") if analysis else "PENDING"
+        started_val = getattr(analysis, stage["started"], None) if analysis else None
+        completed_val = getattr(analysis, stage["completed"], None) if analysis else None
+        duration_val = getattr(analysis, stage["duration"], None) if analysis else None
+
+        formatted = format_status_with_time(status_val, started_val, completed_val, duration_val)
+        result[stage["name"] + "_status"] = formatted
+
+    # Общий статус
+    overall_status = "PENDING"
+    total_time_str = "—"
+    if analysis:
+        overall_status = analysis.overall_status
+        if analysis.overall_status == "SUCCESS" and analysis.total_duration is not None:
+            total_time_str = f"{analysis.total_duration:.1f} sec"
+
+    result["overall_status"] = f"{overall_status} ({total_time_str})" if total_time_str != "—" else overall_status
+
+    return result
 
 
 @app.get("/analytics/group/{group_id}", response_model=AnalyticsResponse)
