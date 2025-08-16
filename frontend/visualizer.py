@@ -1,23 +1,61 @@
 import cv2
 import numpy as np
 from PIL import Image
+import requests
+from io import BytesIO
+from icecream import ic
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
-def draw_bounding_boxes(image_path, ocr_blocks=None, detected_objects=None,
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_SECURE = os.getenv("MINIO_SECURE").lower() == "true"
+MINIO_BUCKET = os.getenv("MINIO_BUCKET")
+if MINIO_SECURE:
+    MINIO_BASE_URL = f"https://{MINIO_ENDPOINT}"
+else:
+
+    MINIO_BASE_URL = f"http://{MINIO_ENDPOINT}"
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL")
+if not MINIO_PUBLIC_URL:
+    MINIO_PUBLIC_URL = MINIO_BASE_URL 
+
+def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None, 
+                        detected_objects=None,
                         ocr_color=(0, 255, 0), obj_color=(0, 255, 255)):
     if ocr_blocks is None:
         ocr_blocks = []
     if detected_objects is None:
         detected_objects = []
 
+    ic(image_path_or_url)
+    img_source = image_url or image_path_or_url
+    if not img_source:
+        raise ValueError("Необходимо указать image_path_or_url или image_url")
+
     # Загружаем изображение
     try:
-        image = Image.open(image_path).convert("RGB")
+        if img_source.startswith(('http://', 'https://')):
+            # Загрузка по URL
+            ic(img_source)
+            response = requests.get(img_source)
+            response.raise_for_status()
+            image = Image.open(BytesIO(response.content)).convert("RGB")
+            ic(image)
+        else:
+            # Загрузка из локального файла
+            image = Image.open(img_source).convert("RGB")
+
         img_array = np.array(image)
+        ic(img_array.shape)
         h, w, _ = img_array.shape
         img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     except Exception as e:
-        raise RuntimeError(f"Не удалось загрузить изображение {image_path}: {e}")
+        ic(e)
+        raise RuntimeError(f"Не удалось загрузить изображение {image_path_or_url}: {e}")
 
     # Рисуем OCR-рамки
     for block in ocr_blocks:

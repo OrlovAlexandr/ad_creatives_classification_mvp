@@ -32,18 +32,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-creatives}
     entrypoint: >
       /bin/sh -c "
-      # Проверяем доступность MinIO через mc
-      until mc alias set minio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY} >/dev/null 2>&1; do
-        echo 'Waiting for MinIO to be ready...';
-        sleep 1;
-      done;
-      
-      # Создаем бакет если не существует
-      mc mb minio/$${MINIO_BUCKET} --ignore-existing;
-      
-      # Устанавливаем политику доступа
-      mc policy set public minio/$${MINIO_BUCKET} >/dev/null;
-      
+      mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
+      mc mb myminio/$${MINIO_BUCKET} --ignore-existing;
+      mc anonymous set public myminio/$${MINIO_BUCKET};
       echo 'MinIO initialization completed successfully';
       "
   db:

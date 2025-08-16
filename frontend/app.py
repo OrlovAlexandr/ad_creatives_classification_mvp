@@ -21,6 +21,20 @@ load_dotenv()
 USE_MOCK = False  # использовать mock-данные вместо реального бэкенда
 BACKEND_URL = os.getenv("BACKEND_URL") if not USE_MOCK else "http://localhost:8000"
 
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_SECURE = os.getenv("MINIO_SECURE").lower() == "true"
+MINIO_BUCKET = os.getenv("MINIO_BUCKET")
+if MINIO_SECURE:
+    MINIO_BASE_URL = f"https://{MINIO_ENDPOINT}"
+else:
+
+    MINIO_BASE_URL = f"http://{MINIO_ENDPOINT}"
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL")
+if not MINIO_PUBLIC_URL:
+    MINIO_PUBLIC_URL = MINIO_BASE_URL 
+
 st.set_page_config(page_title="Классификатор креативов", layout="wide")
 
 
@@ -433,6 +447,11 @@ def page_details():
         
         st.divider()
         st.subheader(f"Детали креатива: {selected_creative_id}")
+        if data["file_path"].startswith(f"{MINIO_BUCKET}/"):             
+             minio_object_key = data["file_path"][len(f"{MINIO_BUCKET}/"):] # Убираем "creatives/"
+        else:
+             minio_object_key = data["file_path"] # Пусть будет как есть, если формат такой
+        minio_image_url = f"{MINIO_PUBLIC_URL}/{data['file_path']}"
 
         try:
             # Получаем OCR и объекты
@@ -441,17 +460,19 @@ def page_details():
 
             # Рисуем рамки
             image_with_boxes = draw_bounding_boxes(
-                image_path=data["file_path"],
+                image_path_or_url=minio_image_url,
                 ocr_blocks=ocr_blocks,
                 detected_objects=detected_objects
             )
 
             # Отображаем
             st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
+            # st.image(minio_image_url, width=300, caption="Оригинал (из MinIO)")
 
         except Exception as e:
             st.error(f"Ошибка при отрисовке: {e}")
-            st.image(data["file_path"], width=300, caption="Оригинал")
+            # st.image(data["file_path"], width=300, caption="Оригинал")
+            st.image(minio_image_url, width=300, caption="Оригинал (из MinIO)")
 
         # Метаданные
         st.write(f"**Файл:** {data['original_filename']}")
