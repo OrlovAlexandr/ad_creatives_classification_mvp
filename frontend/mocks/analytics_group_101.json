@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total_creatives": 5,
+    "first_upload": "2024-08-10",
+    "avg_ocr_confidence": 0.94,
+    "avg_object_confidence": 0.88
+  },
+  "topics": [
+    {"topic": "Электроника", "count": 3},
+    {"topic": "Продукты питания", "count": 1},
+    {"topic": "Красота", "count": 1}
+  ],
+  "dominant_colors": [
+    {"hex": "#000000", "percent": 45.0},
+    {"hex": "#FFFFFF", "percent": 30.0},
+    {"hex": "#FF0000", "percent": 15.0}
+  ],
+  "objects": [
+    {"class": "смартфон", "count": 4},
+    {"class": "человек", "count": 3},
+    {"class": "текст", "count": 5}
+  ]
+}

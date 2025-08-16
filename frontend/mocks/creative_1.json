@@ -1,0 +1,12 @@
+{
+  "creative_id": 1,
+  "group_id": 101,
+  "original_filename": "test.jpg",
+  "file_path": "dataset/creative_1.jpg",
+  "upload_timestamp": "2024-08-10T12:05:00",
+  "file_size": 102400,
+  "file_format": "jpg",
+  "image_width": 1080,
+  "image_height": 1920,
+  "main_topic": "Электроника"
+}
