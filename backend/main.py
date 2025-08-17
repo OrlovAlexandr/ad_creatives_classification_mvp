@@ -6,7 +6,8 @@ from datetime import datetime
 
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
-
+from minio import Minio
+from minio.error import S3Error
 from sqlalchemy.orm import Session
 
 import database
@@ -17,6 +18,29 @@ from models import CreativeBase, CreativeDetail, UploadResponse, AnalyticsRespon
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Конфигурация MinIO
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+MINIO_SECURE = os.getenv("MINIO_SECURE", "False").lower() == "true"
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "creatives")
+
+# Инициализация клиента MinIO
+minio_client = Minio(
+    MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=MINIO_SECURE
+)
+
+# Создание бакета, если он не существует
+try:
+    if not minio_client.bucket_exists(MINIO_BUCKET):
+        minio_client.make_bucket(MINIO_BUCKET)
+except S3Error as e:
+    logger.error(f"Ошибка при создании бакета MinIO: {e}")
+    raise
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +58,18 @@ def get_db():
     finally:
         db.close()
 
+
+def upload_to_minio(file_path: str, object_name: str) -> str:
+    try:
+        # Проверяем существование бакета
+        if not minio_client.bucket_exists(MINIO_BUCKET):
+            minio_client.make_bucket(MINIO_BUCKET)
+            
+        minio_client.fput_object(MINIO_BUCKET, object_name, file_path)
+        return f"{MINIO_BUCKET}/{object_name}"
+    except S3Error as e:
+        logger.error(f"MinIO error: {e}")
+        raise
 
 @app.post("/upload", response_model=UploadResponse)
 async def upload_files(
@@ -57,6 +93,9 @@ async def upload_files(
     uploaded = 0
     errors = []
 
+    # Создаем временную директорию, если ее нет
+    os.makedirs("uploads", exist_ok=True)
+
     for file, creative_id, orig_filename in zip(files, creative_ids, original_filenames):
         try:
             # Проверка формата
@@ -65,22 +104,29 @@ async def upload_files(
                 errors.append(f"{orig_filename}: неподдерживаемый формат")
                 continue
             
-            # Уникальное имя файла — UUID
-            file_path = os.path.join("uploads", f"{creative_id}.{ext}")
-            with open(file_path, "wb") as buffer:
-                shutil.copyfileobj(file.file, buffer)  # TODO: сохранить на Minio
+            # Сохраняем временно файл локально
+            temp_file_path = os.path.join("uploads", f"{creative_id}.{ext}")
+            with open(temp_file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
             # Получение метаданных
-            with Image.open(file_path) as img:
+            with Image.open(temp_file_path) as img:
                 width, height = img.size
+
+            # Загрузка в MinIO
+            object_name = f"{creative_id}.{ext}"
+            minio_path = upload_to_minio(temp_file_path, object_name)
+
+            # Удаляем временный файл
+            # os.remove(temp_file_path)
 
             # Сохранение в БД
             creative = database.Creative(
                 creative_id=creative_id,
                 group_id=group_id,
                 original_filename=orig_filename,
-                file_path=file_path,
-                file_size=os.path.getsize(file_path),
+                file_path=minio_path,  # Сохраняем путь в MinIO
+                file_size=os.path.getsize(temp_file_path),
                 file_format=ext,
                 image_width=width,
                 image_height=height
@@ -94,7 +140,10 @@ async def upload_files(
             uploaded += 1
         except Exception as e:
             errors.append(f"{orig_filename}: {str(e)}")
-
+            # Удаляем временный файл, если он был создан
+            #if os.path.exists(temp_file_path):
+            #    os.remove(temp_file_path)
+            
     return UploadResponse(uploaded=uploaded, group_id=group_id, errors=errors)
 
 
