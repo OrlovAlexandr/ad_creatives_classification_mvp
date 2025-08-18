@@ -305,6 +305,7 @@ def page_upload():
                 st.session_state.selected_files = [] 
                 # Также сбрасываем ключ виджета на всякий случай
                 st.session_state.uploader_key = str(uuid.uuid4())
+                st.session_state.pop("current_group_id", None)  # Очищаем прежний Group ID
                 fetch_groups.clear()
                 st.rerun()
             else:

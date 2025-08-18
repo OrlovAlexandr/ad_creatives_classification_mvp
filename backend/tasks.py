@@ -174,7 +174,7 @@ def process_creative(self, creative_id: str):
 
         # Анализ цветов (скорее всего надо добавить в таблицу статусов)
         try:
-            colors_result = get_top_colors(temp_local_path, n_dominant=3, n_secondary=3)
+            colors_result = get_top_colors(temp_local_path, n_dominant=3, n_secondary=3, n_coeff=1)
             palette_result = classify_colors_by_palette(colors_result)
 
             analysis.dominant_colors = colors_result.get("dominant_colors", [])
