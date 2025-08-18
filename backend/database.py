@@ -40,6 +40,8 @@ class CreativeAnalysis(Base):
     topic_confidence = Column(Float)
     # Определени доминантного цвета
     dominant_colors = Column(JSON)
+    secondary_colors = Column(JSON)
+    palette_colors = Column(JSON)
 
     # Статусы этапов
     ocr_status = Column(String, default="PENDING")
@@ -63,7 +65,3 @@ class CreativeAnalysis(Base):
     total_duration = Column(Float)
 
     error_message = Column(Text)
-
-
-# Создание таблиц
-# Base.metadata.create_all(bind=engine)  # Перенесено в main (антипаттерн)

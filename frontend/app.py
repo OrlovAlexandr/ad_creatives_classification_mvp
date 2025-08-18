@@ -9,9 +9,10 @@ import io
 import pandas as pd
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
 from icecream import ic
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from PIL import Image
 # from st_aggrid.shared import JsCode
 
@@ -433,6 +434,88 @@ def page_analytics():
             st.write("Доминирующие цвета:", ", ".join(colors))
 
 
+def color_block(hex_color, label, percent):
+    """Отображает цвет как блок с подписью"""
+    st.markdown(
+        f"""
+        <div style="
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background-color: {hex_color};
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 5px;
+            text-align: center;
+            font-size: 12px;
+            color: {'white' if is_dark(hex_color) else 'black'};
+            line-height: 40px;
+            font-weight: bold;
+        " title="{label}: {percent}%">
+            {percent:.0f}%
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+def color_block_horizontal(colors, title="Цвета", show_percent=True, show_rgb=False):
+    """
+    Отображает цвета в колонках.
+    :param colors: Список словарей с 'hex', 'percent', 'rgb'
+    :param title: Заголовок блока
+    :param show_percent: Показывать процент
+    :param show_rgb: Показывать RGB
+    """
+    if not colors:
+        return
+    st.markdown(" ")
+    st.markdown(f"**{title}**")
+
+    # 🔥 Сортируем по проценту (от большего к меньшему)
+    sorted_colors = sorted(colors, key=lambda x: x.get("percent", 0), reverse=True)
+
+    n_cols = max(1, min(len(sorted_colors), 10))
+    cols = st.columns(n_cols, gap="medium")
+
+    for c, col in zip(sorted_colors, cols):
+        with col:
+            # Цветной блок
+            st.markdown(
+                f"""
+                <div style="
+                    width: 50px;
+                    height: 50px;
+                    background-color: {c['hex']};
+                    border: 1px solid #e0e0e0;
+                    border-radius: 8px;
+                "></div>
+                """,
+                unsafe_allow_html=True
+            )
+            # Подпись: HEX + класс + процент + RGB
+            label_parts = [f"<b>{c['hex'].upper()}</b>"]
+            # Если есть 'class_name' (например, из palette_colors), показываем
+            if 'class_name' in c:
+                label_parts.append(f"<medium>{c['class_name']}</medium>")
+            if show_percent:
+                label_parts.append(f"<medium>{c['percent']:.1f}%</medium>")
+            if show_rgb and 'rgb' in c:
+                label_parts.append(f"<small>RGB({c['rgb'][0]}, {c['rgb'][1]}, {c['rgb'][2]})</small>")
+
+            label_html = "<br>".join(label_parts)
+            st.markdown(
+                f"<div style='text-align: left; font-size: 13px; line-height: 1.3;'>{label_html}</div>",
+                unsafe_allow_html=True
+            )
+
+def is_dark(hex_color):
+    """Определяет, тёмный ли цвет (для выбора цвета текста)"""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    brightness = (r * 299 + g * 587 + b * 114) / 1000
+    return brightness < 128
+
+
 # Страница: Детали креатива
 def page_details():
     st.header("Детали креатива")
@@ -591,14 +674,44 @@ def page_details():
         else:
             st.info("Объекты не обнаружены.")
 
+        # dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
+        # if dominant_colors:
+        #     st.subheader("Доминирующие цвета")
+        #     cols = st.columns(len(dominant_colors))
+        #     for i, c in enumerate(dominant_colors):
+        #         with cols[i]:
+        #             st.color_picker(f"{c['hex']}", c["hex"], disabled=True)
+        #             st.caption(f"{c['percent']}%")
+        # else:
+        #     st.info("Цвета не определены.")
+
         dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
-        if dominant_colors:
-            st.subheader("Доминирующие цвета")
-            cols = st.columns(len(dominant_colors))
-            for i, c in enumerate(dominant_colors):
-                with cols[i]:
-                    st.color_picker(f"{c['hex']}", c["hex"], disabled=True)
-                    st.caption(f"{c['percent']}%")
+        secondary_colors = data.get('analysis', {}).get('secondary_colors', [])
+        palette_colors = data.get('analysis', {}).get('palette_colors', {})
+
+        if dominant_colors or secondary_colors or palette_colors:
+            st.subheader("Цвета")
+
+            # Доминирующие цвета
+            if dominant_colors:
+                color_block_horizontal(dominant_colors, "Доминирующие цвета", show_percent=True, show_rgb=True)
+
+            # Второстепенные цвета
+            if secondary_colors:
+                color_block_horizontal(secondary_colors, "Второстепенные цвета", show_percent=True, show_rgb=True)
+
+            # Цвета по палитре
+            if palette_colors:
+                # Преобразуем словарь в список и добавляем class_name
+                palette_list = [
+                    {
+                        "hex": info["hex"],
+                        "percent": info["percent"],
+                        "class_name": cls  # Добавляем название класса
+                    }
+                    for cls, info in palette_colors.items()
+                ]
+                color_block_horizontal(palette_list, "По палитре", show_percent=True, show_rgb=True)
         else:
             st.info("Цвета не определены.")
 

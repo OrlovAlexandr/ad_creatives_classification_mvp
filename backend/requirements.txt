@@ -9,3 +9,5 @@ pydantic
 python-dotenv
 numpy
 minio
+scikit-learn
+icecream

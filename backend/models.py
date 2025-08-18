@@ -26,12 +26,15 @@ class CreativeBase(BaseModel):
 
 
 class AnalysisBase(BaseModel):
-    dominant_colors: List[Dict] = None
-    ocr_text: str = None
-    ocr_blocks: List[Dict] = None
-    detected_objects: List[Dict] = None
-    main_topic: str = None
-    topic_confidence: float = None
+    dominant_colors: Optional[List[Dict]] = None
+    secondary_colors: Optional[List[Dict]] = None
+    palette_colors: Optional[Dict] = None
+    
+    ocr_text: Optional[str] = None
+    ocr_blocks: Optional[List[Dict]] = None
+    detected_objects: Optional[List[Dict]] = None
+    main_topic: Optional[str] = None
+    topic_confidence: Optional[float] = None
     class Config:
         from_attributes = True
 

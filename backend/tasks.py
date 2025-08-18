@@ -1,7 +1,11 @@
 from celery import Celery
-from config import REDIS_URL
+from config import (
+    REDIS_URL, MINIO_PUBLIC_URL, MINIO_BUCKET, MINIO_ACCESS_KEY, 
+    MINIO_SECRET_KEY, MINIO_SECURE, MINIO_ENDPOINT
+    )
 from database import SessionLocal
 import database
+from minio_client import minio_client
 from PIL import Image
 import numpy as np
 from collections import Counter
@@ -9,6 +13,7 @@ import os
 from datetime import datetime
 import random
 import time
+from color_utils import get_top_colors, classify_colors_by_palette
 
 
 TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
@@ -41,6 +46,7 @@ celery = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)
 @celery.task(bind=True, max_retries=3)
 def process_creative(self, creative_id: str):
     db = SessionLocal()
+    temp_local_path = None
     try:
         creative = db.query(database.Creative).filter(
             database.Creative.creative_id == creative_id
@@ -56,7 +62,38 @@ def process_creative(self, creative_id: str):
             db.add(analysis)
 
         analysis.overall_status = "PROCESSING"
-        # db.commit()  # Расскоментировать, если будет затрачиваться время на старт обработки
+        db.commit()
+
+        # Скачиваем изображение из MinIO в локальную папку на период обработки
+        try:
+            object_name = f"{creative_id}.{creative.file_format}"
+            temp_local_path = f"/tmp/{creative_id}.{creative.file_format}"
+
+            response = minio_client.get_object(MINIO_BUCKET, object_name)
+            with open(temp_local_path, "wb") as f:
+                f.write(response.read())
+
+            if not os.path.exists(temp_local_path):
+                raise Exception("Файл не был сохранён локально")
+
+        except Exception as e:
+            logger.error(f"Ошибка загрузки изображения из MinIO для {creative_id}: {e}")
+            analysis.overall_status = "ERROR"
+            analysis.error_message = "Не удалось загрузить изображение"
+            db.commit()
+            return {"status": "error", "creative_id": creative_id}
+
+        # Получаем размеры изображения
+        try:
+            with Image.open(temp_local_path) as img:
+                width, height = img.size
+        except Exception as e:
+            logger.error(f"Ошибка чтения изображения {temp_local_path}: {e}")
+            analysis.overall_status = "ERROR"
+            analysis.error_message = "Некорректное изображение"
+            db.commit()
+            return {"status": "error", "creative_id": creative_id}
+
 
         # 1 - OCR
         analysis.ocr_status = "PROCESSING"
@@ -133,14 +170,29 @@ def process_creative(self, creative_id: str):
         analysis.classification_duration = (
             analysis.classification_сompleted_at - analysis.classification_started_at
             ).total_seconds()
+        db.commit()
 
-        # Доминирующие цвета
-        # analysis.dominant_colors = get_dominant_colors(creative.file_path, n_colors=3)
-        analysis.dominant_colors = [{
-                "hex": "#000000",
-                "rgb": [0, 0, 0],
-                "percent": 45.1
-            }]
+        # Анализ цветов (скорее всего надо добавить в таблицу статусов)
+        try:
+            colors_result = get_top_colors(temp_local_path, n_dominant=3, n_secondary=3)
+            palette_result = classify_colors_by_palette(colors_result)
+
+            analysis.dominant_colors = colors_result.get("dominant_colors", [])
+            analysis.secondary_colors = colors_result.get("secondary_colors", [])
+            analysis.palette_colors = palette_result
+
+            # analysis.color_analysis_status = "SUCCESS"
+        except Exception as e:
+            logger.error(f"Ошибка при анализе цветов для {creative_id}: {e}")
+            # analysis.color_analysis_status = "ERROR"
+        finally:
+            # analysis.color_analysis_completed_at = datetime.datetime.utcnow()
+            # if analysis.color_analysis_started_at:
+                # analysis.color_analysis_duration = (
+                #     analysis.color_analysis_completed_at - analysis.color_analysis_started_at
+                # ).total_seconds()
+            db.commit()
+
         
         # Завершение
         analysis.overall_status = "SUCCESS"
@@ -163,28 +215,9 @@ def process_creative(self, creative_id: str):
         raise self.retry(exc=exc, countdown=30)
     finally:
         db.close()
-
-
-def get_dominant_colors(image_path, n_colors=3):
-    """Возвращает доминирующие цвета с помощью k-means"""
-    try:
-        img = Image.open(image_path).convert("RGB")
-        img = img.resize((150, 150))  # Уменьшаем для скорости
-        data = np.array(img).reshape(-1, 3)
-
-        pixels = [tuple(pixel) for pixel in data]
-        counter = Counter(pixels)
-        total = len(pixels)
-        most_common = counter.most_common(n_colors)
-        colors = []
-        for (r, g, b), count in most_common:
-            hex_color = f"#{r:02x}{g:02x}{b:02x}"
-            colors.append({
-                "hex": hex_color,
-                "rgb": [int(r), int(g), int(b)],
-                "percent": round(100 * count / total, 1)
-            })
-        return colors
-    except Exception as e:
-        print(f"Ошибка при вычислении цветов: {e}")
-        return []
+        # Удаляем временный файл
+        if temp_local_path and os.path.exists(temp_local_path):
+            try:
+                os.remove(temp_local_path)
+            except Exception as e:
+                logger.warning(f"Не удалось удалить временный файл {temp_local_path}: {e}")

@@ -210,6 +210,8 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
     if analysis and analysis.overall_status == "SUCCESS":
         analysis_data = {
             "dominant_colors": analysis.dominant_colors,
+            "secondary_colors": analysis.secondary_colors,
+            "palette_colors": analysis.palette_colors,
             "ocr_text": analysis.ocr_text,
             "ocr_blocks": analysis.ocr_blocks,
             "detected_objects": analysis.detected_objects,
