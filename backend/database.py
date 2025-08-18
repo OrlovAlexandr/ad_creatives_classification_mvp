@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, JSON, Text, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
@@ -18,7 +18,7 @@ class Creative(Base):
     group_id = Column(String, index=True)
     original_filename = Column(String)
     file_path = Column(String)
-    upload_timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    upload_timestamp = Column(DateTime, default=datetime.utcnow)
     file_size = Column(Integer)
     file_format = Column(String)
     image_width = Column(Integer)
@@ -47,6 +47,7 @@ class CreativeAnalysis(Base):
     ocr_status = Column(String, default="PENDING")
     detection_status = Column(String, default="PENDING")
     classification_status = Column(String, default="PENDING")
+    color_analysis_status = Column(String, default="PENDING")
     overall_status = Column(String, default="PENDING")  # PENDING, PROCESSING, SUCCESS, ERROR
 
     # Временные метки этапов
@@ -56,12 +57,15 @@ class CreativeAnalysis(Base):
     detection_completed_at = Column(DateTime)
     classification_started_at = Column(DateTime)
     classification_completed_at = Column(DateTime)
+    color_analysis_started_at = Column(DateTime)
+    color_analysis_completed_at = Column(DateTime)
     analysis_timestamp = Column(DateTime)
 
     # Время выполнения
     ocr_duration = Column(Float)
     detection_duration = Column(Float)
     classification_duration = Column(Float)
+    color_analysis_duration = Column(Float)
     total_duration = Column(Float)
 
     error_message = Column(Text)

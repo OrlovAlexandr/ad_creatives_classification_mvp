@@ -169,12 +169,15 @@ def fetch_creatives_by_group(group_id: str) -> Optional[list]:
 
 
 def style_status(val):
-    if "SUCCESS" in str(val):
-        return "background-color: #d4edda; color: #155724"
-    elif "PROCESSING" in str(val):
-        return "background-color: #fff3cd; color: #856404"
-    elif val == "PENDING":
-        return "background-color: #f8f9fa; color: #6c757d"
+    val_str = str(val)
+    if val_str == "—":
+        return "background-color: #ebebeb; color: #6c757d"  # PENDING — серый
+    elif val_str == "X":
+        return "background-color: #f8d7da; color: #721c24"  # ERROR — красный
+    elif val_str.endswith("sec "):  # Есть пробел в конце → PROCESSING
+        return "background-color: #fff3cd; color: #856404"  # Жёлтый
+    elif val_str.endswith("sec"):  # Без пробела → SUCCESS
+        return "background-color: #d4edda; color: #155724"  # Зелёный
     return ""
 
 def style_topic(val):
@@ -313,6 +316,26 @@ def page_upload():
 
     if "uploaded_creatives" in st.session_state and st.session_state.uploaded_creatives:
         st.subheader("Статус обработки")
+        st.markdown(f"**Группа:** `{st.session_state.current_group_id}`")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            # st.markdown("**Готово**")
+            st.color_picker("Готово", "#69cd81", disabled=True)
+
+        with col2:
+            # st.markdown("**В процессе**")
+            st.color_picker("В процессе", "#f1d477", disabled=True)
+
+        with col3:
+            # st.markdown("**Ожидание**")
+            st.color_picker("Ожидание", "#c4c4c4", disabled=True)
+
+        with col4:
+            # st.markdown("**Ошибка**")
+            st.color_picker("Ошибка", "#f38080", disabled=True)
+
         status_table = st.empty()
         while True:
             statuses = []
@@ -324,44 +347,61 @@ def page_upload():
                     resp = requests.get(f"{BACKEND_URL}/status/{cid}")
                     if resp.status_code == 200:
                         data = resp.json()
+                        # ic(data)
 
                         original_topic = data["main_topic"]
                         translated_topic = TOPIC_TRANSLATIONS.get(
                             original_topic, original_topic
-                            ) if original_topic else "PENDING"
+                            ) if original_topic else "—"
                         
+                        # Собираем все статусы этапов
+                        stage_statuses = [
+                            data["ocr_status"],
+                            data["detection_status"],
+                            data["classification_status"],
+                            data["color_status"],
+                        ]
+
+                        # Креатив "готов", если все этапы завершены (заканчиваются на "sec", а не "sec ")
+                        is_finished = all(
+                            isinstance(s, str) and s.endswith("sec") and not s.endswith("sec ") 
+                            for s in stage_statuses if s != "X"  # Исключаем ошибки
+                        )
+                        # ic("===============: ", data["overall_status"])
                         statuses.append({
                             "ID": cid[:8] + "...",
-                            "Оригинальное имя": data["original_filename"],
+                            "Файл": data["original_filename"],
                             "Размер": data["file_size"],
                             "Разрешение": data["image_size"],
                             "Время загрузки": data["upload_timestamp"].split(".")[0].replace("T", " "),
-                            "OCR-распознавание": data["ocr_status"],
-                            "Детекция объектов": data["detection_status"],
-                            "Классификация": data["classification_status"],
+                            "OCR": data["ocr_status"],
+                            "Детекция": data["detection_status"],
+                            "Классиф.": data["classification_status"],
+                            "Цвет": data["color_status"],
                             "Топик": translated_topic or "PENDING",
-                            "Confidence": f"{data['topic_confidence']:.2f}" if data["topic_confidence"] else "PENDING",
-                            "Статус": data["overall_status"]
+                            "Confidence": f"{data['topic_confidence']:.2f}" if data["topic_confidence"] else "—",
+                            "Статус": data.get("overall_status", "—")
                         })
-                        if str(data["overall_status"]).startswith(("SUCCESS", "ERROR")):
+                        if is_finished:
                             finished_count += 1
+                        # if str(data["overall_status"]) != "—":
+                        #     finished_count += 1
                     else:
                         statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Статус {resp.status_code}"})
                 except requests.exceptions.RequestException as e:
                     statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Сеть: {type(e).__name__}"})
                 except Exception as e:
                     statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Ошибка: {type(e).__name__}"})
-
+            # ic("===============: ", statuses)
             df = pd.DataFrame(statuses)
             styled_df = df.style.map(style_status, subset=[
-                "OCR-распознавание",
-                "Детекция объектов",
-                "Классификация",
-                "Статус"
+                "OCR", "Детекция", "Классиф.", "Цвет", "Статус"
             ]).map(style_topic, subset=["Топик"])
             status_table.dataframe(styled_df, use_container_width=True)
             # st.write(f"DEBUG: finished_count = {finished_count}, total_count = {total_count}") #  Временный вывод
             
+
+
             if finished_count == total_count and total_count > 0:
                 st.success("Все креативы обработаны!")
                 st.session_state.uploaded_creatives = [] 
@@ -472,7 +512,7 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
     st.markdown(" ")
     st.markdown(f"**{title}**")
 
-    # 🔥 Сортируем по проценту (от большего к меньшему)
+    # Сортируем по проценту (от большего к меньшему)
     sorted_colors = sorted(colors, key=lambda x: x.get("percent", 0), reverse=True)
 
     n_cols = max(1, min(len(sorted_colors), 10))

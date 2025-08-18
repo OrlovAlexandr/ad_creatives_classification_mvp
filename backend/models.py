@@ -29,6 +29,15 @@ class AnalysisBase(BaseModel):
     dominant_colors: Optional[List[Dict]] = None
     secondary_colors: Optional[List[Dict]] = None
     palette_colors: Optional[Dict] = None
+
+    ocr_status: Optional[str] = None
+    detection_status: Optional[str] = None
+    classification_status: Optional[str] = None
+    color_analysis_status: Optional[str] = None
+    ocr_duration: Optional[float] = None
+    detection_duration: Optional[float] = None
+    classification_duration: Optional[float] = None
+    color_analysis_duration: Optional[float] = None
     
     ocr_text: Optional[str] = None
     ocr_blocks: Optional[List[Dict]] = None

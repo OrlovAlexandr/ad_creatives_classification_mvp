@@ -170,9 +170,12 @@ def process_creative(self, creative_id: str):
         analysis.classification_duration = (
             analysis.classification_сompleted_at - analysis.classification_started_at
             ).total_seconds()
-        db.commit()
 
         # Анализ цветов (скорее всего надо добавить в таблицу статусов)
+        analysis.color_analysis_status = "PROCESSING"
+        analysis.color_analysis_started_at = datetime.utcnow()
+        db.commit()
+
         try:
             colors_result = get_top_colors(temp_local_path, n_dominant=3, n_secondary=3, n_coeff=1)
             palette_result = classify_colors_by_palette(colors_result)
@@ -181,16 +184,16 @@ def process_creative(self, creative_id: str):
             analysis.secondary_colors = colors_result.get("secondary_colors", [])
             analysis.palette_colors = palette_result
 
-            # analysis.color_analysis_status = "SUCCESS"
+            analysis.color_analysis_status = "SUCCESS"
         except Exception as e:
             logger.error(f"Ошибка при анализе цветов для {creative_id}: {e}")
-            # analysis.color_analysis_status = "ERROR"
+            analysis.color_analysis_status = "ERROR"
         finally:
-            # analysis.color_analysis_completed_at = datetime.datetime.utcnow()
-            # if analysis.color_analysis_started_at:
-                # analysis.color_analysis_duration = (
-                #     analysis.color_analysis_completed_at - analysis.color_analysis_started_at
-                # ).total_seconds()
+            analysis.color_analysis_completed_at = datetime.utcnow()
+            if analysis.color_analysis_started_at:
+                analysis.color_analysis_duration = (
+                    analysis.color_analysis_completed_at - analysis.color_analysis_started_at
+                ).total_seconds()
             db.commit()
 
         

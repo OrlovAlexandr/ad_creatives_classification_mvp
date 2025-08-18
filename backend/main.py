@@ -287,16 +287,25 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
             "started": "classification_started_at",
             "completed": "classification_completed_at",
             "duration": "classification_duration"
+        },
+        {
+            "name": "color",
+            "status": "color_analysis_status",
+            "started": "color_analysis_started_at",
+            "completed": "color_analysis_completed_at",
+            "duration": "color_analysis_duration"
         }
     ]
     
     def format_status_with_time(status, started, completed, duration):
         if status == "SUCCESS" and duration is not None:
-            return f"SUCCESS ({duration:.1f} sec)"
+            return f"{duration:.1f} sec"  # Без пробела SUCCESS
         elif status == "PROCESSING" and started:
             elapsed = (datetime.utcnow() - started).total_seconds()
-            return f"PROCESSING ({elapsed:.1f} sec)"
-        return status
+            return f"{elapsed:.1f} sec "  # С пробелом PROCESSING
+        elif status == "ERROR":
+            return "X"
+        return "—"
     
     result = {
         "creative_id": creative_id,
@@ -317,15 +326,27 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
         formatted = format_status_with_time(status_val, started_val, completed_val, duration_val)
         result[stage["name"] + "_status"] = formatted
 
-    # Общий статус
     overall_status = "PENDING"
     total_time_str = "—"
-    if analysis:
-        overall_status = analysis.overall_status
-        if analysis.overall_status == "SUCCESS" and analysis.total_duration is not None:
-            total_time_str = f"{analysis.total_duration:.1f} sec"
 
-    result["overall_status"] = f"{overall_status} ({total_time_str})" if total_time_str != "—" else overall_status
+    if analysis:
+        # Определяем, завершён ли общий процесс
+        if analysis.overall_status == "SUCCESS" and analysis.total_duration is not None:
+            # SUCCESS — время без пробела
+            total_time_str = f"{analysis.total_duration:.1f} sec"
+        elif analysis.overall_status == "PROCESSING":
+            # PROCESSING — текущее время с пробелом в конце
+            if analysis.ocr_started_at:  # считаем от начала OCR
+                elapsed = (datetime.utcnow() - analysis.ocr_started_at).total_seconds()
+                total_time_str = f"{elapsed:.1f} sec "
+        elif analysis.overall_status == "ERROR":
+            total_time_str = "X"
+        else:
+            total_time_str = "—"  # PENDING
+    else:
+        total_time_str = "—"  # Нет анализа
+
+    result["overall_status"] = total_time_str
 
     return result
 
