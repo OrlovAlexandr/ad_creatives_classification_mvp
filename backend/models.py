@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel
 
@@ -63,10 +63,13 @@ class GroupSummary(BaseModel):
 
 
 class AnalyticsResponse(BaseModel):
-    summary: GroupSummary
-    topics: List[Dict]
-    dominant_colors: List[Dict]
-    objects: List[Dict]
+    summary: Dict[str, Any]
+    topics: List[Dict[str, Any]]
+    dominant_colors: List[Dict[str, Any]]
+    durations: Optional[Dict[str, float]] = None
+    topics_table: Optional[List[Dict[str, Any]]] = None
+    total_processing_time: Optional[float] = None
+    total_creatives_in_group: Optional[int]
 
 class UploadResponse(BaseModel):
     uploaded: int

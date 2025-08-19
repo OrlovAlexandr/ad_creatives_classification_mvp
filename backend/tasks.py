@@ -1,7 +1,8 @@
 from celery import Celery
 from config import (
     REDIS_URL, MINIO_PUBLIC_URL, MINIO_BUCKET, MINIO_ACCESS_KEY, 
-    MINIO_SECRET_KEY, MINIO_SECURE, MINIO_ENDPOINT
+    MINIO_SECRET_KEY, MINIO_SECURE, MINIO_ENDPOINT,
+    TOPICS, TOPIC_TRANSLATIONS,
     )
 from database import SessionLocal
 import database
@@ -15,8 +16,6 @@ import random
 import time
 from color_utils import get_top_colors, classify_colors_by_palette
 
-
-TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
 
 TOPIC_TEXTS = {
     'tableware': 'НАБОР ИЗ НЕРЖАВЕЙКИ. ПОСУДА ДЛЯ КУХНИ. 10 ПРЕДМЕТОВ',
@@ -171,7 +170,7 @@ def process_creative(self, creative_id: str):
             analysis.classification_сompleted_at - analysis.classification_started_at
             ).total_seconds()
 
-        # Анализ цветов (скорее всего надо добавить в таблицу статусов)
+        # 4 - Анализ цветов
         analysis.color_analysis_status = "PROCESSING"
         analysis.color_analysis_started_at = datetime.utcnow()
         db.commit()

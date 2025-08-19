@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Form
 from minio import Minio
 from minio.error import S3Error
 from sqlalchemy.orm import Session
+from config import TOPICS, TOPIC_TRANSLATIONS
 
 import database
 import tasks
@@ -221,7 +222,6 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
     else:
         analysis_data = None
 
-    # Конвертация ORM в Pydantic
     result = CreativeBase(**creative_data) 
     return CreativeDetail(**result.model_dump(), analysis=analysis_data)
 
@@ -265,7 +265,6 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
     if not creative:
         raise HTTPException(status_code=404, detail="Креатив не найден")
     
-    # Конфигурация этапов
     stages = [
         {
             "name": "ocr",
@@ -330,34 +329,53 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
     total_time_str = "—"
 
     if analysis:
-        # Определяем, завершён ли общий процесс
         if analysis.overall_status == "SUCCESS" and analysis.total_duration is not None:
-            # SUCCESS — время без пробела
             total_time_str = f"{analysis.total_duration:.1f} sec"
         elif analysis.overall_status == "PROCESSING":
-            # PROCESSING — текущее время с пробелом в конце
-            if analysis.ocr_started_at:  # считаем от начала OCR
+            if analysis.ocr_started_at:
                 elapsed = (datetime.utcnow() - analysis.ocr_started_at).total_seconds()
                 total_time_str = f"{elapsed:.1f} sec "
         elif analysis.overall_status == "ERROR":
             total_time_str = "X"
         else:
-            total_time_str = "—"  # PENDING
+            total_time_str = "—"
     else:
-        total_time_str = "—"  # Нет анализа
-
+        total_time_str = "—"
     result["overall_status"] = total_time_str
 
     return result
 
 
+def calculate_group_processing_time(db: Session, group_id: str) -> tuple[float, int]:
+    analyses = db.query(
+        database.CreativeAnalysis.ocr_started_at,
+        database.CreativeAnalysis.analysis_timestamp
+    ).join(
+        database.Creative,
+        database.Creative.creative_id == database.CreativeAnalysis.creative_id
+    ).filter(
+        database.Creative.group_id == group_id,
+        database.CreativeAnalysis.overall_status == "SUCCESS"
+    ).all()
+
+    if not analyses:
+        return 0.0, 0
+
+    start_times = [a.ocr_started_at for a in analyses if a.ocr_started_at]
+    end_times = [a.analysis_timestamp for a in analyses if a.analysis_timestamp]
+
+    if not start_times or not end_times:
+        return 0.0, len(analyses)
+
+    min_start = min(start_times)
+    max_end = max(end_times)
+    total_time = (max_end - min_start).total_seconds()
+
+    return total_time, len(analyses)
+
+
 @app.get("/analytics/group/{group_id}", response_model=AnalyticsResponse)
 def get_analytics(group_id: str, db: Session = Depends(get_db)):
-    """
-    Аналитика группы креативов.
-    TODO: продумать что показывать в аналитике, и что возвращать на фронт
-    """
-    # Поиск и проверка группы
     creatives = db.query(database.Creative).filter(database.Creative.group_id == group_id).all()
     if not creatives:
         raise HTTPException(status_code=404, detail="Группа не найдена")
@@ -367,50 +385,153 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):
         database.CreativeAnalysis.overall_status == "SUCCESS"
     ).all()
 
-    total = len(analyses)
+    total_analyses = len(analyses)
     avg_ocr_conf = 0.0
     avg_obj_conf = 0.0
     topics = {}
     colors = {}
-    objects = {}
+    topic_stats = {}
+
+    for topic in TOPICS:
+        topic_stats[topic] = {
+            "count": 0,
+            "ocr_conf": 0.0,
+            "obj_conf": 0.0
+        }
 
     for a in analyses:
-        # OCR confidence (среднее по блокам)
         if a.ocr_blocks:
             confs = [b["confidence"] for b in a.ocr_blocks]
             avg_ocr_conf += sum(confs) / len(confs)
+            if a.main_topic:
+                topic_stats[a.main_topic]["ocr_conf"] += sum(confs) / len(confs)
 
-        # Object confidence
         if a.detected_objects:
             confs = [o["confidence"] for o in a.detected_objects]
             avg_obj_conf += sum(confs) / len(confs)
+            if a.main_topic:
+                topic_stats[a.main_topic]["obj_conf"] += sum(confs) / len(confs)
 
-        # Топики
         if a.main_topic:
             topic = a.main_topic
             topics[topic] = topics.get(topic, 0) + 1
+            topic_stats[topic]["count"] += 1
 
-        # Цвета
-        for c in a.dominant_colors:
-            hex_color = c["hex"]
-            colors[hex_color] = colors.get(hex_color, 0) + 1
+        for c in a.dominant_colors or []:
+            hex_color = c.get("hex")
+            if hex_color:
+                colors[hex_color] = colors.get(hex_color, 0) + 1
 
-        # Объекты
-        for o in a.detected_objects:
-            cls = o["class"]
-            objects[cls] = objects.get(cls, 0) + 1
+    avg_ocr_conf = avg_ocr_conf / total_analyses if total_analyses else 0
+    avg_obj_conf = avg_obj_conf / total_analyses if total_analyses else 0
 
-    avg_ocr_conf = avg_ocr_conf / total if total else 0
-    avg_obj_conf = avg_obj_conf / total if total else 0
+    # таблица по тематикам
+    topics_table = []
+    for topic, stats in topic_stats.items():
+        if stats["count"] == 0:
+            continue
+        topics_table.append({
+            "Тематики": TOPIC_TRANSLATIONS.get(topic, topic),
+            "Кол-во": stats["count"],
+            "Ср. уверенность (OCR)": f"{stats['ocr_conf'] / stats['count']:.2f}" if stats["count"] else "—",
+            "Ср. уверенность (объекты)": f"{stats['obj_conf'] / stats['count']:.2f}" if stats["count"] else "—"
+        })
+
+    # Общее время обработки группы
+    total_processing_time, total_creatives = calculate_group_processing_time(db, group_id)
 
     return {
         "summary": {
-            "total_creatives": total,
-            "first_upload": min(c.upload_timestamp for c in creatives).isoformat(),
+            "total_creatives": total_analyses,
             "avg_ocr_confidence": round(avg_ocr_conf, 2),
             "avg_object_confidence": round(avg_obj_conf, 2)
         },
         "topics": [{"topic": k, "count": v} for k, v in topics.items()],
         "dominant_colors": [{"hex": k, "count": v} for k, v in colors.items()],
-        "objects": [{"class": k, "count": v} for k, v in objects.items()]
+        "topics_table": topics_table,
+        "total_processing_time": round(total_processing_time, 2),
+        "total_creatives_in_group": total_creatives
+    }
+
+@app.get("/analytics/all", response_model=AnalyticsResponse)
+def get_analytics_all(db: Session = Depends(get_db)):
+    groups = db.query(database.Creative.group_id).distinct().all()
+    if not groups:
+        raise HTTPException(status_code=404, detail="Нет групп в БД")
+
+    total_processing_time = 0.0
+    total_creatives_all = 0
+
+    for (group_id,) in groups:
+        group_time, group_count = calculate_group_processing_time(db, group_id)
+        total_processing_time += group_time
+        total_creatives_all += group_count
+
+    # Анализ всех креативов
+    analyses = db.query(database.CreativeAnalysis).join(database.Creative).filter(
+        database.CreativeAnalysis.overall_status == "SUCCESS"
+    ).all()
+
+    total_analyses = len(analyses)
+    avg_ocr_conf = 0.0
+    avg_obj_conf = 0.0
+    topics = {}
+    colors = {}
+    topic_stats = {}
+
+    for topic in TOPICS:
+        topic_stats[topic] = {"count": 0, "ocr_conf": 0.0, "obj_conf": 0.0}
+
+    for a in analyses:
+        if a.ocr_blocks:
+            confs = [b["confidence"] for b in a.ocr_blocks]
+            avg_ocr_conf += sum(confs) / len(confs)
+            if a.main_topic:
+                topic_stats[a.main_topic]["ocr_conf"] += sum(confs) / len(confs)
+
+        if a.detected_objects:
+            confs = [o["confidence"] for o in a.detected_objects]
+            avg_obj_conf += sum(confs) / len(confs)
+            if a.main_topic:
+                topic_stats[a.main_topic]["obj_conf"] += sum(confs) / len(confs)
+
+        if a.main_topic:
+            topic = a.main_topic
+            topics[topic] = topics.get(topic, 0) + 1
+            topic_stats[topic]["count"] += 1
+
+        for c in a.dominant_colors or []:
+            hex_color = c.get("hex")
+            if hex_color:
+                colors[hex_color] = colors.get(hex_color, 0) + 1
+
+    avg_ocr_conf = avg_ocr_conf / total_analyses if total_analyses else 0
+    avg_obj_conf = avg_obj_conf / total_analyses if total_analyses else 0
+
+    topics_table = []
+    for topic, stats in topic_stats.items():
+        if stats["count"] == 0:
+            continue
+        topics_table.append({
+            "Тематики": TOPIC_TRANSLATIONS.get(topic, topic),
+            "Кол-во": stats["count"],
+            "Ср. уверенность (OCR)": f"{stats['ocr_conf'] / stats['count']:.2f}" if stats["count"] else "—",
+            "Ср. уверенность (объекты)": f"{stats['obj_conf'] / stats['count']:.2f}" if stats["count"] else "—"
+        })
+
+    # Среднее время на один креатив
+    avg_time_per_creative = total_processing_time / total_creatives_all if total_creatives_all > 0 else 0
+
+    return {
+        "summary": {
+            "total_creatives": total_creatives_all,
+            "avg_ocr_confidence": round(avg_ocr_conf, 2),
+            "avg_object_confidence": round(avg_obj_conf, 2)
+        },
+        "topics": [{"topic": k, "count": v} for k, v in topics.items()],
+        "dominant_colors": [{"hex": k, "count": v} for k, v in colors.items()],
+        "topics_table": topics_table,
+        "total_processing_time": round(total_processing_time, 2),
+        "total_creatives_in_group": total_creatives_all,
+        "avg_time_per_creative": round(avg_time_per_creative, 2)
     }

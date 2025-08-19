@@ -14,7 +14,6 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
 from icecream import ic
 from PIL import Image
-# from st_aggrid.shared import JsCode
 
 from visualizer import draw_bounding_boxes
 
@@ -67,9 +66,9 @@ def generate_creative_id():
 def fetch_groups():
     """Получает список групп креативов с бэкенда (или из mock)"""
     try:
-        # st.write(f"Запрос к: {BACKEND_URL}/groups")  # ← DEBUG
+        # st.write(f"Запрос к: {BACKEND_URL}/groups")
         response = requests.get(f"{BACKEND_URL}/groups")
-        # st.write("Ответ /groups:", response.status_code, response.text)  # ← DEBUG
+        # st.write("Ответ /groups:", response.status_code, response.text)
         response.raise_for_status()
         raw = response.json()
         
@@ -156,6 +155,15 @@ def fetch_analytics(group_id):
         st.error("Ошибка загрузки аналитики")
         return None
 
+def fetch_analytics_all():
+    """Получает аналитику по всем креативам"""
+    try:
+        response = requests.get(f"{BACKEND_URL}/analytics/all")
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        st.error(f"Ошибка загрузки общей аналитики: {e}")
+        return None
 
 def fetch_creatives_by_group(group_id: str) -> Optional[list]:
     """Получает список креативов по ID группы"""
@@ -171,13 +179,13 @@ def fetch_creatives_by_group(group_id: str) -> Optional[list]:
 def style_status(val):
     val_str = str(val)
     if val_str == "—":
-        return "background-color: #ebebeb; color: #6c757d"  # PENDING — серый
+        return "background-color: #ebebeb; color: #6c757d"
     elif val_str == "X":
-        return "background-color: #f8d7da; color: #721c24"  # ERROR — красный
-    elif val_str.endswith("sec "):  # Есть пробел в конце → PROCESSING
-        return "background-color: #fff3cd; color: #856404"  # Жёлтый
-    elif val_str.endswith("sec"):  # Без пробела → SUCCESS
-        return "background-color: #d4edda; color: #155724"  # Зелёный
+        return "background-color: #f8d7da; color: #721c24"
+    elif val_str.endswith("sec "):
+        return "background-color: #fff3cd; color: #856404"
+    elif val_str.endswith("sec"):
+        return "background-color: #d4edda; color: #155724"
     return ""
 
 def style_topic(val):
@@ -215,7 +223,7 @@ def display_uploaded_thumbnails(files_list):
                             uploaded_file_obj["type"].startswith('image/')):
                             image_bytes = uploaded_file_obj["file_obj"].getvalue() 
                             image = Image.open(io.BytesIO(image_bytes))
-                            image.thumbnail((THUMBNAIL_WIDTH, THUMBNAIL_WIDTH * 2)) # Ограничиваем высоту
+                            image.thumbnail((THUMBNAIL_WIDTH, THUMBNAIL_WIDTH * 2))
                             st.image(image, width=THUMBNAIL_WIDTH) 
                         else:
                             st.info(f"Файл: {uploaded_file_obj['type'] or 'Неизвестный тип'}")
@@ -237,7 +245,7 @@ def display_uploaded_thumbnails(files_list):
         
         st.rerun() 
 
-# Страница: Загрузка креативов
+# Загрузка креативов
 def page_upload():
     st.header("Загрузка креативов")
 
@@ -252,12 +260,11 @@ def page_upload():
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = str(uuid.uuid4())
 
-    # File uploader
     new_uploads = st.file_uploader(
         "Выберите изображения (JPG, PNG, WebP)",
         type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
-        key=st.session_state.uploader_key, # Используем динамический ключ
+        key=st.session_state.uploader_key,
         help="Поддерживаемые форматы: JPG, PNG, WebP. Можете выбрать несколько файлов."
     )
 
@@ -284,7 +291,6 @@ def page_upload():
     st.subheader("Выбранные файлы")
     display_uploaded_thumbnails(st.session_state.selected_files)
 
-    # Кнопка загрузки
     if st.session_state.selected_files and st.button("Загрузить", key="upload_btn"):
         with st.spinner("Идёт загрузка и обработка..."):
             files_for_upload = []
@@ -304,9 +310,7 @@ def page_upload():
                     f"Успешно загружено {result['uploaded']} файлов в группу {st.session_state.current_group_id}"
                 )
                 st.session_state.uploaded_creatives = creative_ids
-                # Очищаем список выбранных файлов после успешной загрузки
                 st.session_state.selected_files = [] 
-                # Также сбрасываем ключ виджета на всякий случай
                 st.session_state.uploader_key = str(uuid.uuid4())
                 st.session_state.pop("current_group_id", None)  # Очищаем прежний Group ID
                 fetch_groups.clear()
@@ -347,14 +351,12 @@ def page_upload():
                     resp = requests.get(f"{BACKEND_URL}/status/{cid}")
                     if resp.status_code == 200:
                         data = resp.json()
-                        # ic(data)
 
                         original_topic = data["main_topic"]
                         translated_topic = TOPIC_TRANSLATIONS.get(
                             original_topic, original_topic
                             ) if original_topic else "—"
                         
-                        # Собираем все статусы этапов
                         stage_statuses = [
                             data["ocr_status"],
                             data["detection_status"],
@@ -362,12 +364,10 @@ def page_upload():
                             data["color_status"],
                         ]
 
-                        # Креатив "готов", если все этапы завершены (заканчиваются на "sec", а не "sec ")
                         is_finished = all(
                             isinstance(s, str) and s.endswith("sec") and not s.endswith("sec ") 
-                            for s in stage_statuses if s != "X"  # Исключаем ошибки
+                            for s in stage_statuses if s != "X"
                         )
-                        # ic("===============: ", data["overall_status"])
                         statuses.append({
                             "ID": cid[:8] + "...",
                             "Файл": data["original_filename"],
@@ -384,50 +384,50 @@ def page_upload():
                         })
                         if is_finished:
                             finished_count += 1
-                        # if str(data["overall_status"]) != "—":
-                        #     finished_count += 1
                     else:
                         statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Статус {resp.status_code}"})
                 except requests.exceptions.RequestException as e:
                     statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Сеть: {type(e).__name__}"})
                 except Exception as e:
                     statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Ошибка: {type(e).__name__}"})
-            # ic("===============: ", statuses)
             df = pd.DataFrame(statuses)
             styled_df = df.style.map(style_status, subset=[
                 "OCR", "Детекция", "Классиф.", "Цвет", "Статус"
             ]).map(style_topic, subset=["Топик"])
             status_table.dataframe(styled_df, use_container_width=True)
-            # st.write(f"DEBUG: finished_count = {finished_count}, total_count = {total_count}") #  Временный вывод
-            
-
 
             if finished_count == total_count and total_count > 0:
                 st.success("Все креативы обработаны!")
                 st.session_state.uploaded_creatives = [] 
-                # st.info("Мониторинг остановлен.")
                 return 
             else:
                 time.sleep(1)
 
+def format_seconds(seconds: float) -> str:
+    seconds = int(seconds)
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
-# Страница: Просмотр аналитики по группе
+def format_seconds_short(seconds: float) -> str:
+    seconds = int(seconds)
+    m = seconds // 60
+    s = seconds % 60
+    return f"{m:02d}:{s:02d}"
+
+# Просмотр аналитики
 def page_analytics():
-    """
-    Страница: Просмотр аналитики по группе
-    TODO: продумать архитектуру страницы, что мы хотим видеть на странице
-    """
     st.header("Аналитика по группе")
-    groups = fetch_groups()  # Список групп
+
+    groups = fetch_groups()
     if not groups:
         st.info("Нет доступных групп")
         return
 
-
     group_display_map = {g["group_id"]: g["display_name"] for g in groups}
     group_ids = list(group_display_map.keys())
-
-    default_index = 0 if group_ids else None  # бэк уже сортирует
+    default_index = 0 if group_ids else None
 
     selected = st.selectbox(
         "Выберите группу",
@@ -437,42 +437,86 @@ def page_analytics():
         key="selected_group_analytics"
     )
 
-    if selected:
-        data = fetch_analytics(selected)  # Аналитика по группе
-        ic(data)
-        if data:
-            st.subheader("Сводка")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Креативов", data["summary"]["total_creatives"])
-            col2.metric("Средняя уверенность (OCR)", f"{data['summary']['avg_ocr_confidence']:.2f}")
-            col3.metric("Средняя уверенность (объекты)", f"{data['summary']['avg_object_confidence']:.2f}")
+    if not selected:
+        return
+
+    data_group = fetch_analytics(selected)
+    data_all = fetch_analytics_all()
+
+    if not data_group:
+        st.error("Не удалось загрузить аналитику по группе.")
+        return
+
+    if not data_all:
+        st.warning("Не удалось загрузить общую аналитику.")
+        data_all = None
+
+    # Две колонки для сводки и графиков, по группе и общая
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.subheader("Сводка по группе")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Креативов", data_group["summary"]["total_creatives"])
+        c2.metric("Средняя уверенность (OCR)", f"{data_group['summary']['avg_ocr_confidence']:.2f}")
+        c3.metric("Средняя уверенность (объекты)", f"{data_group['summary']['avg_object_confidence']:.2f}")
+
+        st.subheader("Тематики")
+        topics_group = data_group.get("topics", [])
+        if topics_group:
+            df_topics = pd.DataFrame([
+                {"topic": TOPIC_TRANSLATIONS.get(t["topic"], t["topic"]), "count": t["count"]}
+                for t in topics_group
+            ])
+            st.bar_chart(df_topics.set_index("topic")["count"])
+        else:
+            st.info("Нет данных о тематиках.")
+
+    with col_right:
+        st.subheader("Сводка по всем креативам")
+        if data_all:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Групп", len(fetch_groups()))
+            c2.metric("Креативов", data_all["summary"]["total_creatives"])
+            c3.metric("Средняя уверенность (OCR)", f"{data_all['summary']['avg_ocr_confidence']:.2f}")
+            c4.metric("Средняя уверенность (объекты)", f"{data_all['summary']['avg_object_confidence']:.2f}")
 
             st.subheader("Тематики")
-            # df_topics = pd.DataFrame(data["topics"])
-            # st.bar_chart(df_topics.set_index("topic"))
-            topics = data.get("topics", [])
-            if not topics:
-                st.info("Нет данных о тематиках.")
+            topics_all = data_all.get("topics", [])
+            if topics_all:
+                df_topics_all = pd.DataFrame([
+                    {"topic": TOPIC_TRANSLATIONS.get(t["topic"], t["topic"]), "count": t["count"]}
+                    for t in topics_all
+                ])
+                st.bar_chart(df_topics_all.set_index("topic")["count"])
             else:
-                translated_topics = []
-                for topic_data in topics:
-                    original_topic = topic_data.get("topic", "")
-                    translated_topic = TOPIC_TRANSLATIONS.get(original_topic, original_topic)
-                    translated_item = topic_data.copy()
-                    translated_item["topic"] = translated_topic
-                    translated_topics.append(translated_item)
+                st.info("Нет данных о тематиках.")
+        else:
+            st.info("Нет данных по всем креативам.")
 
-                df_topics = pd.DataFrame(translated_topics)
-                if "topic" in df_topics.columns:
-                    st.bar_chart(df_topics.set_index("topic")["count"])
-                else:
-                    st.error("Ошибка: в данных нет колонки 'topic'.")
-                    st.write("Доступные колонки:", df_topics.columns.tolist())
-                    st.write("Пример данных:", translated_topics)
+    st.subheader("Подробная аналитика по группе")
+    if "topics_table" in data_group and data_group["topics_table"]:
+        df_group = pd.DataFrame(data_group["topics_table"])
+        st.dataframe(df_group, use_container_width=True)
 
-            st.subheader("Цвета")
-            colors = [c["hex"] for c in data["dominant_colors"]]
-            st.write("Доминирующие цвета:", ", ".join(colors))
+        st.markdown(f"**Общее время на обработку всех креативов в группе:** `{format_seconds(data_group['total_processing_time'])}`")
+        if data_group["total_creatives_in_group"] > 0:
+            avg_per_creative = data_group['total_processing_time'] / data_group['total_creatives_in_group']
+            st.markdown(f"**Среднее время на обработку одного креатива:** `{format_seconds_short(avg_per_creative)}`")
+    else:
+        st.info("Нет данных для таблицы по группе.")
+
+    st.subheader("Подробная аналитика общая")
+    if data_all and "topics_table" in data_all and data_all["topics_table"]:
+        df_all = pd.DataFrame(data_all["topics_table"])
+        st.dataframe(df_all, use_container_width=True)
+
+        st.markdown(f"**Общее время на обработку всех креативов вообще:** `{format_seconds(data_all['total_processing_time'])}`")
+        if data_all.get("total_creatives_in_group", 0) > 0:
+            avg_per_creative = data_all['total_processing_time'] / data_all['total_creatives_in_group']
+            st.markdown(f"**Среднее время на обработку одного креатива:** `{format_seconds_short(avg_per_creative)}`")
+    else:
+        st.info("Нет данных для общей таблицы.")
 
 
 def color_block(hex_color, label, percent):
@@ -500,13 +544,6 @@ def color_block(hex_color, label, percent):
     )
 
 def color_block_horizontal(colors, title="Цвета", show_percent=True, show_rgb=False):
-    """
-    Отображает цвета в колонках.
-    :param colors: Список словарей с 'hex', 'percent', 'rgb'
-    :param title: Заголовок блока
-    :param show_percent: Показывать процент
-    :param show_rgb: Показывать RGB
-    """
     if not colors:
         return
     st.markdown(" ")
@@ -520,7 +557,6 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
 
     for c, col in zip(sorted_colors, cols):
         with col:
-            # Цветной блок
             st.markdown(
                 f"""
                 <div style="
@@ -535,7 +571,7 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
             )
             # Подпись: HEX + класс + процент + RGB
             label_parts = [f"<b>{c['hex'].upper()}</b>"]
-            # Если есть 'class_name' (например, из palette_colors), показываем
+
             if 'class_name' in c:
                 label_parts.append(f"<medium>{c['class_name']}</medium>")
             if show_percent:
@@ -557,11 +593,10 @@ def is_dark(hex_color):
     return brightness < 128
 
 
-# Страница: Детали креатива
+# Детали креатива
 def page_details():
     st.header("Детали креатива")
 
-    # Получаем группы
     groups = fetch_groups()
     if not groups:
         st.info("Нет доступных групп")
@@ -715,17 +750,6 @@ def page_details():
         else:
             st.info("Объекты не обнаружены.")
 
-        # dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
-        # if dominant_colors:
-        #     st.subheader("Доминирующие цвета")
-        #     cols = st.columns(len(dominant_colors))
-        #     for i, c in enumerate(dominant_colors):
-        #         with cols[i]:
-        #             st.color_picker(f"{c['hex']}", c["hex"], disabled=True)
-        #             st.caption(f"{c['percent']}%")
-        # else:
-        #     st.info("Цвета не определены.")
-
         dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
         secondary_colors = data.get('analysis', {}).get('secondary_colors', [])
         palette_colors = data.get('analysis', {}).get('palette_colors', {})
@@ -743,12 +767,11 @@ def page_details():
 
             # Цвета по палитре
             if palette_colors:
-                # Преобразуем словарь в список и добавляем class_name
                 palette_list = [
                     {
                         "hex": info["hex"],
                         "percent": info["percent"],
-                        "class_name": cls  # Добавляем название класса
+                        "class_name": cls
                     }
                     for cls, info in palette_colors.items()
                 ]

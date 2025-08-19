@@ -17,7 +17,17 @@ if MINIO_SECURE:
     MINIO_BASE_URL = f"https://{MINIO_ENDPOINT}"
 else:
     MINIO_BASE_URL = f"http://{MINIO_ENDPOINT}"
-    
+
 MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL")
 if not MINIO_PUBLIC_URL:
     MINIO_PUBLIC_URL = MINIO_BASE_URL 
+
+TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
+
+TOPIC_TRANSLATIONS = {
+    'tableware': 'Столовые приборы',
+    'ties': 'Галстуки',
+    'bags': 'Сумки',
+    'cups': 'Чашки',
+    'clocks': 'Часы'
+}
