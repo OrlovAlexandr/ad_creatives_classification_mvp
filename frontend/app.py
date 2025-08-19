@@ -44,7 +44,7 @@ MAX_COLUMNS = 10
 MIN_COLUMNS = 1
 
 TOPIC_TRANSLATIONS = {
-    'tableware': 'Ст. приборы',
+    'tableware': 'Столовые приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Чашки',
