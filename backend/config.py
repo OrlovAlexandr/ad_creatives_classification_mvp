@@ -66,18 +66,8 @@ MODEL_CONFIG = {
 TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
 
 TOPIC_TRANSLATIONS = {
-<<<<<<< Updated upstream
-<<<<<<< HEAD
-    'tableware': 'Ст. приборы',
+    'tableware': 'Столовые приборы',
     'ties': 'Галстуки',
-=======
-    'tableware': 'Столовые приборы',
-    'ties': 'Галстуки', 
->>>>>>> 9419857650f02e2816f4226bce90a7b807b9ad62
-=======
-    'tableware': 'Столовые приборы',
-    'ties': 'Галстуки', 
->>>>>>> Stashed changes
     'bags': 'Сумки',
     'cups': 'Чашки',
     'clocks': 'Часы'
