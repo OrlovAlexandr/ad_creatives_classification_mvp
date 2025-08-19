@@ -70,6 +70,8 @@ class AnalyticsResponse(BaseModel):
     topics_table: Optional[List[Dict[str, Any]]] = None
     total_processing_time: Optional[float] = None
     total_creatives_in_group: Optional[int]
+    color_class_distribution: Optional[Dict[str, float]] = None
+    topic_color_distribution: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 class UploadResponse(BaseModel):
     uploaded: int

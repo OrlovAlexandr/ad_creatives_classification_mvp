@@ -16,6 +16,7 @@ import tasks
 from contextlib import asynccontextmanager
 from database import SessionLocal, engine, Base
 from models import CreativeBase, CreativeDetail, UploadResponse, AnalyticsResponse, UploadRequest
+from color_utils import COLOR_CLASSES, COLOR_VISUAL_CLASSES, HEX_TO_CLASS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -298,7 +299,7 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
     
     def format_status_with_time(status, started, completed, duration):
         if status == "SUCCESS" and duration is not None:
-            return f"{duration:.1f} sec"  # Без пробела SUCCESS
+            return f"{duration:.1f} sec"  # Без пробела SUCCESS (нужно для подкрашивания ячеек)
         elif status == "PROCESSING" and started:
             elapsed = (datetime.utcnow() - started).total_seconds()
             return f"{elapsed:.1f} sec "  # С пробелом PROCESSING
@@ -373,6 +374,59 @@ def calculate_group_processing_time(db: Session, group_id: str) -> tuple[float, 
 
     return total_time, len(analyses)
 
+def get_color_class_distribution(analyses):
+    class_distribution = {}
+
+    for analysis in analyses:
+        palette_colors = analysis.palette_colors or {}
+        for class_name, info in palette_colors.items():
+            if class_name in COLOR_CLASSES:
+                class_distribution[class_name] = class_distribution.get(class_name, 0) + info["percent"]
+
+    return class_distribution
+
+def get_topic_color_distribution(analyses, top_n=5):
+    topic_data = {}
+
+    for a in analyses:
+        if not a.main_topic or a.overall_status != "SUCCESS":
+            continue
+
+        topic = a.main_topic
+        if topic not in topic_data:
+            topic_data[topic] = {}
+
+        palette_colors = a.palette_colors or {}
+        for class_name, info in palette_colors.items():
+            if class_name in COLOR_VISUAL_CLASSES:
+                hex_list = list(COLOR_VISUAL_CLASSES[class_name])
+                hex_color = f"#{hex_list[0].upper()}" if hex_list else "#CCCCCC"
+                if class_name not in topic_data[topic]:
+                    topic_data[topic][class_name] = {"hex": hex_color, "percent": 0.0}
+                topic_data[topic][class_name]["percent"] += info["percent"]
+
+    result = {}
+    for topic, colors in topic_data.items():
+        sorted_colors = sorted(colors.items(), key=lambda x: x[1]["percent"], reverse=True)
+        top_colors = sorted_colors[:top_n]
+
+        percents = [item[1]["percent"] for item in top_colors]
+        total = sum(percents)
+
+        if total > 0:
+            normalized = [p / total * 100 for p in percents]
+        else:
+            normalized = [100 / len(percents)] * len(percents)  # на случай, если все нули
+
+        result[topic] = []
+        for (class_name, data), norm_percent in zip(top_colors, normalized):
+            result[topic].append({
+                "class": class_name,
+                "hex": data["hex"],
+                "percent": norm_percent
+            })
+
+    return result
 
 @app.get("/analytics/group/{group_id}", response_model=AnalyticsResponse)
 def get_analytics(group_id: str, db: Session = Depends(get_db)):
@@ -440,6 +494,10 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):
     # Общее время обработки группы
     total_processing_time, total_creatives = calculate_group_processing_time(db, group_id)
 
+    color_class_dist = get_color_class_distribution(analyses)
+    topic_color_distribution = get_topic_color_distribution(analyses, top_n=5)
+
+
     return {
         "summary": {
             "total_creatives": total_analyses,
@@ -450,7 +508,9 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):
         "dominant_colors": [{"hex": k, "count": v} for k, v in colors.items()],
         "topics_table": topics_table,
         "total_processing_time": round(total_processing_time, 2),
-        "total_creatives_in_group": total_creatives
+        "total_creatives_in_group": total_creatives,
+        "color_class_distribution": color_class_dist,
+        "topic_color_distribution": topic_color_distribution
     }
 
 @app.get("/analytics/all", response_model=AnalyticsResponse)
@@ -522,6 +582,10 @@ def get_analytics_all(db: Session = Depends(get_db)):
     # Среднее время на один креатив
     avg_time_per_creative = total_processing_time / total_creatives_all if total_creatives_all > 0 else 0
 
+    color_class_dist = get_color_class_distribution(analyses)
+    topic_color_distribution = get_topic_color_distribution(analyses, top_n=5)
+
+
     return {
         "summary": {
             "total_creatives": total_creatives_all,
@@ -533,5 +597,7 @@ def get_analytics_all(db: Session = Depends(get_db)):
         "topics_table": topics_table,
         "total_processing_time": round(total_processing_time, 2),
         "total_creatives_in_group": total_creatives_all,
-        "avg_time_per_creative": round(avg_time_per_creative, 2)
+        "avg_time_per_creative": round(avg_time_per_creative, 2),
+        "color_class_distribution": color_class_dist,
+        "topic_color_distribution": topic_color_distribution
     }

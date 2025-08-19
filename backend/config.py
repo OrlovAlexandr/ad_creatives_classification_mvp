@@ -25,7 +25,7 @@ if not MINIO_PUBLIC_URL:
 TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
 
 TOPIC_TRANSLATIONS = {
-    'tableware': 'Столовые приборы',
+    'tableware': 'Ст. приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Чашки',

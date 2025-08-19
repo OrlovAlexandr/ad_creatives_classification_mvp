@@ -5,6 +5,7 @@ from typing import Dict, Optional
 import uuid
 import time
 import io
+from icecream import ic
 
 import pandas as pd
 import requests
@@ -12,11 +13,11 @@ import streamlit as st
 import streamlit.components.v1 as components
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 from dotenv import load_dotenv
-from icecream import ic
 from PIL import Image
+import plotly.graph_objects as go
 
 from visualizer import draw_bounding_boxes
-
+from color_utils import COLOR_VISUAL_CLASSES
 load_dotenv()
 
 # Настройки
@@ -43,7 +44,7 @@ MAX_COLUMNS = 10
 MIN_COLUMNS = 1
 
 TOPIC_TRANSLATIONS = {
-    'tableware': 'Столовые приборы',
+    'tableware': 'Ст. приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Чашки',
@@ -416,9 +417,120 @@ def format_seconds_short(seconds: float) -> str:
     s = seconds % 60
     return f"{m:02d}:{s:02d}"
 
+
+def create_color_pie_chart(class_distribution, title="Распределение цветов"):
+    if not class_distribution:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Нет данных",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=14, color="gray")
+        )
+        fig.update_layout(title=title, showlegend=False)
+        return fig
+
+    sorted_items = sorted(class_distribution.items(), key=lambda x: x[1], reverse=True)
+    labels = [item[0] for item in sorted_items]
+    values = [item[1] for item in sorted_items]
+
+    colors = []
+    for label in labels:
+        hex_list = list(COLOR_VISUAL_CLASSES.get(label, {"ffffff"}))
+        hex_color = f"#{hex_list[0].upper()}"
+        colors.append(hex_color)
+
+    fig = go.Figure(data=[go.Pie(
+        labels=labels,
+        values=values,
+        marker=dict(colors=colors),
+        textinfo='label+percent',
+        texttemplate="%{label}: %{percent:.1%}",
+        hovertemplate="<b>%{label}</b><br>Доля: %{percent:.1%}<extra></extra>"
+    )])
+
+    fig.update_layout(
+        title=title,
+        showlegend=False,
+        margin=dict(t=50, b=20, l=20, r=20),
+        height=500
+    )
+
+    return fig
+
+def create_topic_color_stacked_bar(topic_color_data, title="Цвета по тематикам"):
+    if not topic_color_data:
+        fig = go.Figure()
+        fig.add_annotation(text="Нет данных", x=0.5, y=0.5, showarrow=False, font=dict(color="gray"))
+        fig.update_layout(title=title, showlegend=False)
+        return fig
+
+    topics_original = list(topic_color_data.keys())
+    topics_translated = [TOPIC_TRANSLATIONS.get(t, t) for t in topics_original]
+    num_topics = len(topics_original)
+
+    fig = go.Figure()
+
+    
+    added_to_legend = set()  # Чтобы не дублировалась
+
+    for topic_orig in reversed(topics_original):
+        topic_translated = TOPIC_TRANSLATIONS.get(topic_orig, topic_orig)
+        current_x = 0
+        colors = topic_color_data[topic_orig]
+        for color_info in colors:
+            class_name = color_info["class"]
+            percent = color_info["percent"]
+            hex_color = color_info["hex"]
+
+            # Добавляем сегмент
+            fig.add_trace(go.Bar(
+                y=[topic_translated],
+                x=[percent],
+                orientation='h',
+                marker=dict(
+                    color=hex_color,
+                    line=dict(color="#AAAAAA", width=0.1)
+                ),
+                text=f"{percent:.1f}%",
+                textposition="inside",   
+                # marker=dict(color=hex_color),
+                name=class_name,
+                legendgroup=class_name,
+                showlegend=(class_name not in added_to_legend),
+                hovertemplate=f"<b>{topic_translated}</b><br>{class_name}: {percent:.1f}%<extra></extra>"
+            ))
+            added_to_legend.add(class_name)
+            current_x += percent
+
+    fig.update_layout(
+        title=title,
+        barmode='stack',
+        yaxis={
+            'categoryorder': 'array',
+            'categoryarray': topics_translated[::-1],
+            # 'tickangle': 90,                # поворот 90°
+            'tickfont': dict(size=12),
+            'title': None
+        },
+        xaxis={
+            'title': 'Доля цвета в тематике (%)',
+            'range': [0, 100],
+            'showgrid': True,
+            'gridcolor': 'lightgray'
+        },
+        height=200 + num_topics * 40,
+        margin=dict(l=150, r=50, t=80, b=50),
+        legend_title="Цвета",
+        showlegend=True,
+        font=dict(size=12),
+    )
+
+    return fig
+
 # Просмотр аналитики
 def page_analytics():
-    st.header("Аналитика по группе")
+    st.header("Аналитика")
 
     groups = fetch_groups()
     if not groups:
@@ -455,25 +567,51 @@ def page_analytics():
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.subheader("Сводка по группе")
+        st.subheader("Сводка")
+        st.markdown(
+            '<div style="font-size: 17px; font-weight: bold;">По группе</div>', unsafe_allow_html=True
+            )
         c1, c2, c3 = st.columns(3)
         c1.metric("Креативов", data_group["summary"]["total_creatives"])
         c2.metric("Средняя уверенность (OCR)", f"{data_group['summary']['avg_ocr_confidence']:.2f}")
         c3.metric("Средняя уверенность (объекты)", f"{data_group['summary']['avg_object_confidence']:.2f}")
 
-        st.subheader("Тематики")
+        st.subheader("Распределение топиков")
         topics_group = data_group.get("topics", [])
         if topics_group:
             df_topics = pd.DataFrame([
                 {"topic": TOPIC_TRANSLATIONS.get(t["topic"], t["topic"]), "count": t["count"]}
                 for t in topics_group
             ])
-            st.bar_chart(df_topics.set_index("topic")["count"])
+            st.bar_chart(df_topics.set_index("topic")["count"], height=300, horizontal=True)
         else:
             st.info("Нет данных о тематиках.")
 
+        st.subheader("Распределение цветов")
+        if "color_class_distribution" in data_group and data_group["color_class_distribution"]:
+            fig_group = create_color_pie_chart(
+                data_group["color_class_distribution"],
+                title="Цвета в группе"
+            )
+            st.plotly_chart(fig_group, use_container_width=True)
+        else:
+            st.info("Нет данных о цветах для построения диаграммы.")
+        
+        st.subheader("Топ-5 цветов по топикам")
+        if "topic_color_distribution" in data_group and data_group["topic_color_distribution"]:
+            fig_group = create_topic_color_stacked_bar(
+                data_group["topic_color_distribution"],
+                title="По группе"
+            )
+            st.plotly_chart(fig_group, use_container_width=True)
+        else:
+            st.info("Нет данных о цветах по топикам.")
+
     with col_right:
-        st.subheader("Сводка по всем креативам")
+        st.subheader(" ")
+        st.markdown(
+            '<div style="font-size: 17px; font-weight: bold;">По всем креативам</div>', unsafe_allow_html=True
+            )
         if data_all:
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Групп", len(fetch_groups()))
@@ -481,37 +619,58 @@ def page_analytics():
             c3.metric("Средняя уверенность (OCR)", f"{data_all['summary']['avg_ocr_confidence']:.2f}")
             c4.metric("Средняя уверенность (объекты)", f"{data_all['summary']['avg_object_confidence']:.2f}")
 
-            st.subheader("Тематики")
+            st.subheader(" ")
             topics_all = data_all.get("topics", [])
             if topics_all:
                 df_topics_all = pd.DataFrame([
                     {"topic": TOPIC_TRANSLATIONS.get(t["topic"], t["topic"]), "count": t["count"]}
                     for t in topics_all
                 ])
-                st.bar_chart(df_topics_all.set_index("topic")["count"])
+                st.bar_chart(df_topics_all.set_index("topic")["count"], height=300, horizontal=True)
             else:
                 st.info("Нет данных о тематиках.")
         else:
             st.info("Нет данных по всем креативам.")
 
-    st.subheader("Подробная аналитика по группе")
+        st.subheader(" ")
+        if data_all and "color_class_distribution" in data_all and data_all["color_class_distribution"]:
+            fig_all = create_color_pie_chart(
+                data_all["color_class_distribution"],
+                title="Цвета во всех креативах"
+            )
+            st.plotly_chart(fig_all, use_container_width=True)
+        else:
+            st.info("Нет данных о цветах для построения диаграммы.")
+
+        st.subheader(" ")
+        if data_all and "topic_color_distribution" in data_all and data_all["topic_color_distribution"]:
+            fig_all = create_topic_color_stacked_bar(
+                data_all["topic_color_distribution"],
+                title="По всем креативам"
+            )
+            st.plotly_chart(fig_all, use_container_width=True)
+        else:
+            st.info("Нет данных о цветах по топикам.")
+
+    st.subheader("Аналитика по группе")
     if "topics_table" in data_group and data_group["topics_table"]:
         df_group = pd.DataFrame(data_group["topics_table"])
         st.dataframe(df_group, use_container_width=True)
 
-        st.markdown(f"**Общее время на обработку всех креативов в группе:** `{format_seconds(data_group['total_processing_time'])}`")
+        st.markdown(f"**Общее время на обработку креативов в группе:** `{format_seconds(data_group['total_processing_time'])}`")
         if data_group["total_creatives_in_group"] > 0:
             avg_per_creative = data_group['total_processing_time'] / data_group['total_creatives_in_group']
             st.markdown(f"**Среднее время на обработку одного креатива:** `{format_seconds_short(avg_per_creative)}`")
     else:
         st.info("Нет данных для таблицы по группе.")
+        
 
-    st.subheader("Подробная аналитика общая")
+    st.subheader("Ааналитика общая")
     if data_all and "topics_table" in data_all and data_all["topics_table"]:
         df_all = pd.DataFrame(data_all["topics_table"])
         st.dataframe(df_all, use_container_width=True)
 
-        st.markdown(f"**Общее время на обработку всех креативов вообще:** `{format_seconds(data_all['total_processing_time'])}`")
+        st.markdown(f"**Общее время на обработку всех креативов:** `{format_seconds(data_all['total_processing_time'])}`")
         if data_all.get("total_creatives_in_group", 0) > 0:
             avg_per_creative = data_all['total_processing_time'] / data_all['total_creatives_in_group']
             st.markdown(f"**Среднее время на обработку одного креатива:** `{format_seconds_short(avg_per_creative)}`")
@@ -519,29 +678,28 @@ def page_analytics():
         st.info("Нет данных для общей таблицы.")
 
 
-def color_block(hex_color, label, percent):
-    """Отображает цвет как блок с подписью"""
-    st.markdown(
-        f"""
-        <div style="
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            background-color: {hex_color};
-            border: 2px solid #ddd;
-            border-radius: 8px;
-            margin: 5px;
-            text-align: center;
-            font-size: 12px;
-            color: {'white' if is_dark(hex_color) else 'black'};
-            line-height: 40px;
-            font-weight: bold;
-        " title="{label}: {percent}%">
-            {percent:.0f}%
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+# def color_block(hex_color, label, percent):
+#     st.markdown(
+#         f"""
+#         <div style="
+#             display: inline-block;
+#             width: 40px;
+#             height: 40px;
+#             background-color: {hex_color};
+#             border: 2px solid #ddd;
+#             border-radius: 8px;
+#             margin: 5px;
+#             text-align: center;
+#             font-size: 12px;
+#             color: {'white' if is_dark(hex_color) else 'black'};
+#             line-height: 40px;
+#             font-weight: bold;
+#         " title="{label}: {percent}%">
+#             {percent:.0f}%
+#         </div>
+#         """,
+#         unsafe_allow_html=True
+#     )
 
 def color_block_horizontal(colors, title="Цвета", show_percent=True, show_rgb=False):
     if not colors:
@@ -549,7 +707,6 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
     st.markdown(" ")
     st.markdown(f"**{title}**")
 
-    # Сортируем по проценту (от большего к меньшему)
     sorted_colors = sorted(colors, key=lambda x: x.get("percent", 0), reverse=True)
 
     n_cols = max(1, min(len(sorted_colors), 10))
@@ -585,12 +742,11 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
                 unsafe_allow_html=True
             )
 
-def is_dark(hex_color):
-    """Определяет, тёмный ли цвет (для выбора цвета текста)"""
-    hex_color = hex_color.lstrip('#')
-    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-    brightness = (r * 299 + g * 587 + b * 114) / 1000
-    return brightness < 128
+# def is_dark(hex_color):
+#     hex_color = hex_color.lstrip('#')
+#     r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+#     brightness = (r * 299 + g * 587 + b * 114) / 1000
+#     return brightness < 128
 
 
 # Детали креатива
@@ -699,26 +855,22 @@ def page_details():
         minio_image_url = f"{MINIO_PUBLIC_URL}/{data['file_path']}"
 
         try:
-            # Получаем OCR и объекты
             ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
             detected_objects = data.get("analysis", {}).get("detected_objects", [])
 
-            # Рисуем рамки
             image_with_boxes = draw_bounding_boxes(
                 image_path_or_url=minio_image_url,
                 ocr_blocks=ocr_blocks,
                 detected_objects=detected_objects
             )
 
-            # Отображаем
             st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
 
         except Exception as e:
             st.error(f"Ошибка при отрисовке: {e}")
             # st.image(data["file_path"], width=300, caption="Оригинал")
-            st.image(minio_image_url, width=300, caption="Оригинал (из MinIO)")
+            st.image(minio_image_url, width=300, caption="Оригинал изображения")
 
-        # Метаданные
         st.write(f"**Файл:** {data['original_filename']}")
         st.write(f"**Размер:** {data['file_size']} байт")
         st.write(f"**Формат:** {data['file_format']}")
@@ -757,15 +909,12 @@ def page_details():
         if dominant_colors or secondary_colors or palette_colors:
             st.subheader("Цвета")
 
-            # Доминирующие цвета
             if dominant_colors:
                 color_block_horizontal(dominant_colors, "Доминирующие цвета", show_percent=True, show_rgb=True)
 
-            # Второстепенные цвета
             if secondary_colors:
                 color_block_horizontal(secondary_colors, "Второстепенные цвета", show_percent=True, show_rgb=True)
 
-            # Цвета по палитре
             if palette_colors:
                 palette_list = [
                     {
@@ -786,7 +935,6 @@ page = st.sidebar.radio(
     "Выберите раздел", ["Загрузка", "Аналитика", "Детали креатива"], 
     key="main_page_selector")
 
-# Очистка состояния при смене страницы
 if "last_page" in st.session_state and st.session_state.last_page != page:
     st.session_state.pop("uploaded_creatives", None)
 st.session_state.last_page = page
