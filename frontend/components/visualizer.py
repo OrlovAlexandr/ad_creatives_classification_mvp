@@ -26,21 +26,19 @@ if not MINIO_PUBLIC_URL:
 def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None, 
                         detected_objects=None,
                         ocr_color=(0, 255, 0), obj_color=(0, 255, 255)):
-    if ocr_blocks is None:
-        ocr_blocks = []
-    if detected_objects is None:
-        detected_objects = []
+    if ocr_blocks is None: ocr_blocks = []
+    if detected_objects is None: detected_objects = []
 
-    ic(image_path_or_url)
     img_source = image_url or image_path_or_url
     if not img_source:
         raise ValueError("Необходимо указать image_path_or_url или image_url")
 
     # Загружаем изображение
     try:
+        ic(f"Загрузка изображения: {img_source}")
+
         if img_source.startswith(('http://', 'https://')):
-            # Загрузка по URL
-            ic(img_source)
+            # Загрузка по URL            
             response = requests.get(img_source)
             response.raise_for_status()
             image = Image.open(BytesIO(response.content)).convert("RGB")
@@ -53,9 +51,12 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
         ic(img_array.shape)
         h, w, _ = img_array.shape
         img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+    except requests.RequestException as e:
+        raise RuntimeError(f"Ошибка сети при загрузке {img_source}: {e}")
+    except (FileNotFoundError, OSError) as e:
+        raise RuntimeError(f"Не удалось открыть файл {img_source}: {e}")
     except Exception as e:
-        ic(e)
-        raise RuntimeError(f"Не удалось загрузить изображение {image_path_or_url}: {e}")
+        raise RuntimeError(f"Неизвестная ошибка при загрузке {img_source}: {e}")
 
     # Рисуем OCR-рамки
     for block in ocr_blocks:
