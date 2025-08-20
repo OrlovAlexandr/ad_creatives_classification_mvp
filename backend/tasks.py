@@ -15,48 +15,6 @@ from datetime import datetime
 import random
 import time
 from color_utils import get_top_colors, classify_colors_by_palette
-from ultralytics import YOLO  
-from config import YOLO_CONFIDENCE_THRESHOLD
-import torch  
-# Загружаем модель один раз при старте
-from minio import Minio
-import os
-from ultralytics import YOLO
-import torch
-import logging
-import cv2
-
-logging.basicConfig(
-    level=logging.INFO, 
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-logger = logging.getLogger(__name__)
-
-
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-MINIO_BUCKET = os.getenv("MINIO_BUCKET", "models")
-MINIO_SECURE = os.getenv("MINIO_SECURE", "False").lower() == "true"
-
-minio_client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=MINIO_SECURE
-)
-
-
-local_weight_path = "/backend/models/yolo/yolo8m.pt"
-
-# Загружаем, если еще нет
-if not os.path.exists(local_weight_path):
-    minio_client.fget_object(MINIO_BUCKET, "yolo8m.pt", local_weight_path)
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-yolo_model = YOLO(local_weight_path)
-yolo_model.to(device)
-
 
 
 TOPIC_TEXTS = {
@@ -172,47 +130,30 @@ def process_creative(self, creative_id: str):
         analysis.detection_started_at = datetime.utcnow()
         db.commit()
 
-        try:
-        # Загружаем изображение из файла и преобразуем в numpy
-            im_pil = Image.open(temp_local_path).convert("RGB")
-            img_array = cv2.cvtColor(np.array(im_pil), cv2.COLOR_RGB2BGR)
+        time.sleep(random.uniform(0.5, 3.0))
+        num_objects = random.randint(2, 6)
+        detected_objects = []
+        for _ in range(num_objects):
+            cls = random.choice(COCO_CLASSES)
+            confidence = round(random.uniform(0.5, 0.99), 2)
+            x1 = random.uniform(0.05, 0.7) * w
+            y1 = random.uniform(0.05, 0.7) * h
+            x2 = x1 + random.uniform(0.1, 0.3) * w
+            y2 = y1 + random.uniform(0.1, 0.3) * h
+            detected_objects.append({
+                "class": cls,
+                "bbox": [x1/w, y1/h, x2/w, y2/h],
+                "confidence": confidence
+            })
+        analysis.detected_objects = detected_objects
+        analysis.detection_status = "SUCCESS"
 
-            # Прогоняем через YOLO
-            results = yolo_model.predict(
-                source=img_array,
-                batch=1,
-                conf=YOLO_CONFIDENCE_THRESHOLD,
-                device=device
-            )[0]
+        analysis.detection_сompleted_at = datetime.utcnow()
+        analysis.detection_duration = (
+            analysis.detection_сompleted_at - analysis.detection_started_at
+            ).total_seconds()
 
-            # Получаем боксы, классы и уверенность
-            bboxes = results.boxes.xyxy.cpu().numpy()
-            labels = results.boxes.cls.cpu().numpy()
-            confidences = results.boxes.conf.cpu().numpy()
 
-            detected_objects = []
-            h, w = im_pil.size[1], im_pil.size[0]
-            for box, label, conf in zip(bboxes, labels, confidences):
-                x1, y1, x2, y2 = box
-                detected_objects.append({
-                    "class": COCO_CLASSES[int(label)],
-                    "bbox": [x1/w, y1/h, x2/w, y2/h],
-                    "confidence": float(conf)
-                })
-
-            analysis.detected_objects = detected_objects
-            analysis.detection_status = "SUCCESS"
-
-        except Exception as e:
-            logger.error(f"Ошибка детекции YOLO для {creative_id}: {e}")
-            analysis.detection_status = "ERROR"
-        finally:
-            analysis.detection_сompleted_at = datetime.utcnow()
-            if analysis.detection_started_at:
-                analysis.detection_duration = (
-                    analysis.detection_сompleted_at - analysis.detection_started_at
-                ).total_seconds()
-            db.commit()
         # 3 - Классификация
         analysis.classification_status = "PROCESSING"
         analysis.classification_started_at = datetime.utcnow()

@@ -5,8 +5,8 @@ services:
     image: minio/minio
     container_name: minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"  # API порт
+      - "9001:9001"  # Console порт
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
@@ -21,21 +21,22 @@ services:
       retries: 3
     restart: unless-stopped
 
-
   minio_init:
     image: minio/mc
     depends_on:
       minio:
         condition: service_healthy
     environment:
-      MC_HOST_minio: http://${MINIO_ACCESS_KEY:-minioadmin}:${MINIO_SECRET_KEY:-minioadmin}@minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-creatives}
-      MODELS_BUCKET: ${MODELS_BUCKET:-models}
-    volumes:
-      - ./minio_init:/minio_init
-    entrypoint: ["/bin/sh", "/minio_init/init.sh"]
-
-
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
+      mc mb myminio/$${MINIO_BUCKET} --ignore-existing;
+      mc anonymous set public myminio/$${MINIO_BUCKET};
+      echo 'MinIO initialization completed successfully';
+      "
   db:
     image: postgres:15
     env_file:
@@ -77,20 +78,15 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET: ${MINIO_BUCKET:-creatives}
-      MODELS_BUCKET: ${MODELS_BUCKET:-models}
-      MODELS_DIR: /app/models
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_started
       minio:
-        condition: service_healthy
-      minio_init:
-        condition: service_completed_successfully
+        condition: service_healthy 
     volumes:
       - uploads:/app/uploads
-      - ./backend/models:/app/models  # Монтируем локальные модели
     restart: unless-stopped
 
   celery_worker:
@@ -106,8 +102,6 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET: ${MINIO_BUCKET:-creatives}
-      MODELS_BUCKET: ${MODELS_BUCKET:-models}
-      MODELS_DIR: /app/models
     depends_on:
       db:
         condition: service_healthy
@@ -119,7 +113,6 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads:shared
-      - ./backend/models:/app/models  # Монтируем локальные модели
     restart: unless-stopped
 
   frontend:

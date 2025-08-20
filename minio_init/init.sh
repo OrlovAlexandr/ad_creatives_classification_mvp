@@ -1,26 +1,12 @@
-#!/bin/sh
-set -e
-
-# Ждём готовности MinIO (пока не ответит на запрос)
-until mc ls minio/; do
+until mc alias set minio http://minio:9000 minioadmin minioadmin; do
   echo "Waiting for MinIO..."
-  sleep 10
+  sleep 1
 done
 
-mc mb minio/${MINIO_BUCKET:-creatives} --ignore-existing
-mc mb minio/${MODELS_BUCKET:-models} --ignore-existing
+# Создаем бакеты
+mc mb minio/creatives --ignore-existing
+mc mb minio/models --ignore-existing
 
-mc anonymous set public minio/${MINIO_BUCKET:-creatives}
-mc anonymous set public minio/${MODELS_BUCKET:-models}
-
-if [ -d "/minio_init/models" ]; then
-  echo "Uploading models to MinIO..."
-  mc cp -r /minio_init/models/ minio/${MODELS_BUCKET:-models}/
-fi
-
-if [ -d "/minio_init/creatives" ]; then
-  echo "Uploading sample creatives to MinIO..."
-  mc cp -r /minio_init/creatives/ minio/${MINIO_BUCKET:-creatives}/
-fi
-
-echo "MinIO initialization completed successfully"
+# Копируем начальные данные 
+mc cp /minio_init/models/yolov8n.pt minio/models/
+mc cp /minio_init/creatives/default.jpg minio/creatives/
