@@ -1,14 +1,13 @@
 from celery import Celery
 from database import SessionLocal
-from minio_client import minio_client
-from PIL import Image
 import os
 from datetime import datetime
-import random
-import time
-from utils.color_utils import get_top_colors, classify_colors_by_palette
-from config import settings, TOPICS, TOPIC_TEXTS, COCO_CLASSES
-from database_models.creative import Creative, CreativeAnalysis
+from config import settings, DOMINANT_COLORS_COUNT, SECONDARY_COLORS_COUNT
+from utils.minio_utils import download_file_from_minio
+from services.processing_service import get_creative_and_analysis, get_image_dimensions
+from ml_models import (
+    perform_classification, perform_color_analysis, perform_ocr, perform_detection
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,157 +18,54 @@ celery = Celery("tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
 @celery.task(bind=True, max_retries=3)
 def process_creative(self, creative_id: str):
-    db = SessionLocal()
+    db = None
     temp_local_path = None
     try:
-        creative = db.query(Creative).filter(
-            Creative.creative_id == creative_id
-            ).first()
-        if not creative:
-            raise Exception("Креатив не найден")
-        
-        analysis = db.query(CreativeAnalysis).filter(
-            CreativeAnalysis.creative_id == creative_id).first()
+        db = SessionLocal()
+        logger.info(f"Начало обработки задачи {creative_id}")
 
-        if not analysis:
-            analysis = CreativeAnalysis(creative_id=creative_id)
-            db.add(analysis)
+        # Получаем креатив и его анализ
+        creative, analysis = get_creative_and_analysis(db, creative_id)
 
         analysis.overall_status = "PROCESSING"
         db.commit()
 
         # Скачиваем изображение из MinIO в локальную папку на период обработки
-        try:
-            object_name = f"{creative_id}.{creative.file_format}"
-            temp_local_path = f"/tmp/{creative_id}.{creative.file_format}"
-
-            response = minio_client.get_object(settings.MINIO_BUCKET, object_name)
-            with open(temp_local_path, "wb") as f:
-                f.write(response.read())
-
-            if not os.path.exists(temp_local_path):
-                raise Exception("Файл не был сохранён локально")
-
-        except Exception as e:
-            logger.error(f"Ошибка загрузки изображения из MinIO для {creative_id}: {e}")
-            analysis.overall_status = "ERROR"
-            analysis.error_message = "Не удалось загрузить изображение"
-            db.commit()
+        temp_local_path = f"/tmp/{creative_id}.{creative.file_format}"
+        if not download_file_from_minio(creative, analysis, db, temp_local_path):
             return {"status": "error", "creative_id": creative_id}
 
         # Получаем размеры изображения
-        try:
-            with Image.open(temp_local_path) as img:
-                width, height = img.size
-        except Exception as e:
-            logger.error(f"Ошибка чтения изображения {temp_local_path}: {e}")
+        success, dimensions = get_image_dimensions(temp_local_path)
+        if not success:
+            logger.error(f"Ошибка чтения изображения {temp_local_path}: {dimensions}")
             analysis.overall_status = "ERROR"
             analysis.error_message = "Некорректное изображение"
             db.commit()
             return {"status": "error", "creative_id": creative_id}
-
-
-        # 1 - OCR
-        analysis.ocr_status = "PROCESSING"
-        analysis.ocr_started_at = datetime.utcnow()        
-        db.commit()
         
-        time.sleep(random.uniform(0.5, 3.0))
-        topic = random.choice(TOPICS)
-        full_text = TOPIC_TEXTS[topic]
-        words = full_text.split(". ")
-        blocks = []
-        h, w = creative.image_height, creative.image_width
-        for word in words:
-            confidence = round(random.uniform(0.7, 0.99), 2)
-            x1 = random.uniform(0.02, 0.1) * w
-            y1 = random.uniform(0.02, 0.8) * h
-            x2 = x1 + random.uniform(0.3, 0.7) * w
-            y2 = y1 + random.uniform(0.05, 0.15) * h
-            blocks.append({
-                "text": word,
-                "bbox": [x1/w, y1/h, x2/w, y2/h],
-                "confidence": confidence
-            })
-        analysis.ocr_text = full_text
-        analysis.ocr_blocks = blocks
-        analysis.ocr_status = "SUCCESS"
+        creative.image_height, creative.image_width = dimensions
 
-        analysis.ocr_сompleted_at = datetime.utcnow()
-        analysis.ocr_duration = (
-            analysis.ocr_сompleted_at - analysis.ocr_started_at
-            ).total_seconds()
+
+        # OCR
+        perform_ocr(creative_id, creative, analysis, db, temp_local_path)
         
-        # 2 - Детекция объектов
-        analysis.detection_status = "PROCESSING"
-        analysis.detection_started_at = datetime.utcnow()
-        db.commit()
+        # Детекция объектов
+        perform_detection(creative_id, creative, analysis, db, temp_local_path)
 
-        time.sleep(random.uniform(0.5, 3.0))
-        num_objects = random.randint(2, 6)
-        detected_objects = []
-        for _ in range(num_objects):
-            cls = random.choice(COCO_CLASSES)
-            confidence = round(random.uniform(0.5, 0.99), 2)
-            x1 = random.uniform(0.05, 0.7) * w
-            y1 = random.uniform(0.05, 0.7) * h
-            x2 = x1 + random.uniform(0.1, 0.3) * w
-            y2 = y1 + random.uniform(0.1, 0.3) * h
-            detected_objects.append({
-                "class": cls,
-                "bbox": [x1/w, y1/h, x2/w, y2/h],
-                "confidence": confidence
-            })
-        analysis.detected_objects = detected_objects
-        analysis.detection_status = "SUCCESS"
+        # Классификация
+        perform_classification(creative_id, analysis, db)
 
-        analysis.detection_сompleted_at = datetime.utcnow()
-        analysis.detection_duration = (
-            analysis.detection_сompleted_at - analysis.detection_started_at
-            ).total_seconds()
-
-
-        # 3 - Классификация
-        analysis.classification_status = "PROCESSING"
-        analysis.classification_started_at = datetime.utcnow()
-        db.commit()
-
-        time.sleep(random.uniform(0.5, 3.0))
-        topic_confidence = round(random.uniform(0.6, 0.95), 2)
-        analysis.main_topic = topic
-        analysis.topic_confidence = topic_confidence
-        analysis.classification_status = "SUCCESS"
-
-        analysis.classification_сompleted_at = datetime.utcnow()
-        analysis.classification_duration = (
-            analysis.classification_сompleted_at - analysis.classification_started_at
-            ).total_seconds()
-
-        # 4 - Анализ цветов
-        analysis.color_analysis_status = "PROCESSING"
-        analysis.color_analysis_started_at = datetime.utcnow()
-        db.commit()
-
-        try:
-            colors_result = get_top_colors(temp_local_path, n_dominant=3, n_secondary=3, n_coeff=1)
-            palette_result = classify_colors_by_palette(colors_result)
-
-            analysis.dominant_colors = colors_result.get("dominant_colors", [])
-            analysis.secondary_colors = colors_result.get("secondary_colors", [])
-            analysis.palette_colors = palette_result
-
-            analysis.color_analysis_status = "SUCCESS"
-        except Exception as e:
-            logger.error(f"Ошибка при анализе цветов для {creative_id}: {e}")
-            analysis.color_analysis_status = "ERROR"
-        finally:
-            analysis.color_analysis_completed_at = datetime.utcnow()
-            if analysis.color_analysis_started_at:
-                analysis.color_analysis_duration = (
-                    analysis.color_analysis_completed_at - analysis.color_analysis_started_at
-                ).total_seconds()
-            db.commit()
-
+        # Анализ цветов
+        perform_color_analysis(
+            creative_id, 
+            analysis, 
+            db, 
+            temp_local_path, 
+            n_dominant=DOMINANT_COLORS_COUNT, 
+            n_secondary=SECONDARY_COLORS_COUNT, 
+            n_coeff=1,
+            )
         
         # Завершение
         analysis.overall_status = "SUCCESS"
@@ -178,23 +74,26 @@ def process_creative(self, creative_id: str):
             analysis.analysis_timestamp - analysis.ocr_started_at
         ).total_seconds()
         db.commit()
-
+        logger.info(f"[{creative_id}] Анализ завершен")
         return {"status": "success", "creative_id": creative_id}
 
     except Exception as exc:
-        db.rollback()
-        analysis = db.query(CreativeAnalysis).filter(
-            CreativeAnalysis.creative_id == creative_id).first()
-        if analysis:
-            analysis.overall_status = "ERROR"
-            analysis.error_message = str(exc)
-            db.commit()
-        raise self.retry(exc=exc, countdown=30)
+        logger.error(f"[{creative_id}] Критическая ошибка: {exc}", exc_info=True)
+        if db:
+            db.rollback()
+            _, analysis = get_creative_and_analysis(creative_id, db)
+            if analysis:
+                analysis.overall_status = "ERROR"
+                analysis.error_message = str(exc)
+                db.commit()
+            raise self.retry(exc=exc, countdown=5)
     finally:
-        db.close()
+        if db:
+            db.close()
         # Удаляем временный файл
         if temp_local_path and os.path.exists(temp_local_path):
             try:
                 os.remove(temp_local_path)
+                logger.debug(f"[{creative_id}] Удален временный файл {temp_local_path}")
             except Exception as e:
-                logger.warning(f"Не удалось удалить временный файл {temp_local_path}: {e}")
+                logger.warning(f"[{creative_id}] Не удалось удалить временный файл {temp_local_path}: {e}")

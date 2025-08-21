@@ -5,31 +5,14 @@ from collections import Counter
 import logging
 import colorsys
 from icecream import ic
-from config import PALETTE_HEX, COLOR_CLASSES
-
+from config import PALETTE_HEX, COLOR_CLASSES, MONOCHROME_HEX_SET
 
 logger = logging.getLogger(__name__)
-
-PALETTE_RGB = np.array([tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) for hex_color in PALETTE_HEX])
 
 def rgb_to_hsv_array(rgb_array):
     rgb_norm = rgb_array / 255.0
     hsv_array = np.apply_along_axis(lambda rgb: colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2]), 1, rgb_norm)
     return hsv_array
-
-PALETTE_HSV = rgb_to_hsv_array(PALETTE_RGB)
-
-HEX_TO_CLASS = {}
-for class_name, hex_colors in COLOR_CLASSES.items():
-    for hex_color in hex_colors:
-        HEX_TO_CLASS[hex_color] = class_name
-
-# HEX монохромных цветов
-MONOCHROME_HEX_SET = {"000000", "404040", "808080", "bfbfbf", "ffffff"}
-
-# Индексы монохромных и немонохромных цветов
-MONOCHROME_INDICES = [i for i, hex_color in enumerate(PALETTE_HEX) if hex_color in MONOCHROME_HEX_SET]
-NON_MONOCHROME_INDICES = [i for i, hex_color in enumerate(PALETTE_HEX) if hex_color not in MONOCHROME_HEX_SET]
 
 def rgb_to_hex(rgb_tuple):
     return "#{:02x}{:02x}{:02x}".format(int(rgb_tuple[0]), int(rgb_tuple[1]), int(rgb_tuple[2]))
@@ -39,7 +22,23 @@ def rgb_to_hsv_single(r, g, b):
     h, s, v = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
     return h * 360, s * 100, v * 100
 
-def get_top_colors(image_path, n_dominant=3, n_secondary=3, resize_size=(300, 300), n_coeff=1.7):
+PALETTE_RGB = np.array([tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) for hex_color in PALETTE_HEX])
+PALETTE_HSV = rgb_to_hsv_array(PALETTE_RGB)
+MONOCHROME_INDICES = [i for i, hex_color in enumerate(PALETTE_HEX) if hex_color in MONOCHROME_HEX_SET]
+NON_MONOCHROME_INDICES = [i for i, hex_color in enumerate(PALETTE_HEX) if hex_color not in MONOCHROME_HEX_SET]
+
+HEX_TO_CLASS = {}
+for class_name, hex_colors in COLOR_CLASSES.items():
+    for hex_color in hex_colors:
+        HEX_TO_CLASS[hex_color] = class_name
+
+def get_top_colors(
+        image_path: str, 
+        n_dominant: int=3, 
+        n_secondary: int=3, 
+        resize_size: tuple=(300, 300), 
+        n_coeff: float=1.0
+        ) -> dict:
     try:
         logger.info(f"[Цвета] Начало обработки изображения: {image_path}")
         image = Image.open(image_path).convert('RGB')
@@ -124,18 +123,18 @@ def classify_colors_by_palette(colors_result: dict) -> dict:
             final_rgb_in_palette = rgb_color # По умолчанию, цвет из палитры
 
             hsv_color = rgb_to_hsv_array(rgb_color.reshape(1, -1))[0] # (H, S, V)
-            h, s, v = hsv_color
+            _, s, v = hsv_color
             saturation_percent = s * 100
             value_percent = v * 100
 
             # Если V <= 15%, то Черный
             if value_percent <= 15:
-                logger.debug(f"[Классификация] Цвет {hex_color} очень темный (V <= 10%). Присваиваем класс 'Черный'.")
+                logger.debug(f"[Классификация] Цвет {hex_color} очень темный. Присваиваем класс 'Черный'.")
                 final_hex = "000000"
                 final_rgb_in_palette = PALETTE_RGB[PALETTE_HEX.index(final_hex)]
             # Если S <= 15%, то ищем близость к монохромным цветам
             elif saturation_percent <= 15:
-                logger.debug(f"[Классификация] Цвет {hex_color} имеет низкую насыщенность (S <= 10%). Ищем ближайший монохромный.")
+                logger.debug(f"[Классификация] Цвет {hex_color} имеет низкую насыщенность. Ищем ближайший монохромный.")
                 if MONOCHROME_INDICES:
                     palette_hsv_mono = PALETTE_HSV[MONOCHROME_INDICES]
                     distances = np.linalg.norm(palette_hsv_mono - hsv_color, axis=1)
@@ -164,7 +163,7 @@ def classify_colors_by_palette(colors_result: dict) -> dict:
                 else:
                      logger.warning(f"[Классификация] Нет немонохромных цветов в палитре для {hex_color}. Оставляем дефолт.")
 
-            # Классификация
+            # Классификация по палитре
             color_class = HEX_TO_CLASS.get(final_hex, "Неизвестно")
             logger.info(f"[Классификация] Цвет {hex_color} ({percent}%) -> Палитра {final_hex} -> Класс {color_class}")
 
@@ -187,17 +186,3 @@ def classify_colors_by_palette(colors_result: dict) -> dict:
     except Exception as e:
         logger.error(f"[Классификация] Ошибка при классификации цветов: {e}", exc_info=True)
         return {}
-
-if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1:
-        path = sys.argv[1]
-        colors_result = get_top_colors(path, n_dominant=3, n_secondary=3)
-        print(f"Результаты get_top_colors для {path}:")
-        print(colors_result)
-
-        classified_result = classify_colors_by_palette(colors_result)
-        print(f"\nРезультаты classify_colors_by_palette для {path}:")
-        print(classified_result)
-    else:
-        print("Укажите путь к изображению как аргумент командной строки.")

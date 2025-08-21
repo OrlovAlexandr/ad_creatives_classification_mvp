@@ -1,8 +1,6 @@
-# import os
-# from dotenv import load_dotenv
-
 import os
 from pydantic_settings import BaseSettings
+
 
 class Settings(BaseSettings):
     DATABASE_URL: str
@@ -19,7 +17,7 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-
+# Константы для тематик
 TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
 
 TOPIC_TRANSLATIONS = {
@@ -51,6 +49,10 @@ COCO_CLASSES = [
     "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
 ]
 
+# Константы для цветового анализа
+DOMINANT_COLORS_COUNT = 3
+SECONDARY_COLORS_COUNT = 3
+
 PALETTE_HEX = [
     "ff0000", "ff8080", "800000", "804040",
     "ff8000", "ffbf80", "804000", "806040",
@@ -71,10 +73,12 @@ PALETTE_HEX = [
     "ffffff" 
 ]
 
+MONOCHROME_HEX_SET = {"000000", "404040", "808080", "bfbfbf", "ffffff"}
+
 COLOR_CLASSES = {
-    "Красный": {"ff0000", "ff8080"},
+    "Красный": {"ff0000", "ff8080", "800000"},
     "Коричневый": {"804040", "804000", "806040"},
-    "Розовый": {"ff8080", "ff80ff", "ff0080", "ff80bf"},
+    "Розовый": {"ff80ff", "ff0080", "ff80bf"},
     "Оранжевый": {"ff8000", "ffbf80"},
     "Желтый": {"ffff00", "ffff80", "808040", "808000"},
     "Зеленый": {"80ff00", "bfff80", "408000", "608040", "00ff00", "80ff80", "008000", "408040", "00ff80", "80ffbf", "008040", "408060"},
