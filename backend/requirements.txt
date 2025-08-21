@@ -11,3 +11,4 @@ numpy
 minio
 scikit-learn
 icecream
+pydantic-settings

@@ -1,7 +1,10 @@
-from datetime import datetime
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
-from pydantic import BaseModel
+
+class UploadRequest(BaseModel):
+    creative_ids: list[str]
+    original_filenames: list[str]
 
 
 class UploadResponse(BaseModel):
@@ -10,19 +13,16 @@ class UploadResponse(BaseModel):
     errors: List[str] = []
 
 
-class CreativeBase(BaseModel):
-    creative_id: str
-    group_id: str
-    original_filename: str
-    file_path: str
-    file_size: int
-    file_format: str
-    image_width: int
-    image_height: int
-    upload_timestamp: str
-
-    class Config:
-        from_attributes = True
+class AnalyticsResponse(BaseModel):
+    summary: Dict[str, Any]
+    topics: List[Dict[str, Any]]
+    dominant_colors: List[Dict[str, Any]]
+    durations: Optional[Dict[str, float]] = None
+    topics_table: Optional[List[Dict[str, Any]]] = None
+    total_processing_time: Optional[float] = None
+    total_creatives_in_group: Optional[int]
+    color_class_distribution: Optional[Dict[str, float]] = None
+    topic_color_distribution: Optional[Dict[str, List[Dict[str, Any]]]] = None
 
 
 class AnalysisBase(BaseModel):
@@ -48,6 +48,21 @@ class AnalysisBase(BaseModel):
         from_attributes = True
 
 
+class CreativeBase(BaseModel):
+    creative_id: str
+    group_id: str
+    original_filename: str
+    file_path: str
+    file_size: int
+    file_format: str
+    image_width: int
+    image_height: int
+    upload_timestamp: str
+
+    class Config:
+        from_attributes = True
+
+
 class CreativeDetail(CreativeBase):
     analysis: Optional[AnalysisBase] = None
 
@@ -60,25 +75,3 @@ class GroupSummary(BaseModel):
     first_upload: str
     avg_ocr_confidence: float
     avg_object_confidence: float
-
-
-class AnalyticsResponse(BaseModel):
-    summary: Dict[str, Any]
-    topics: List[Dict[str, Any]]
-    dominant_colors: List[Dict[str, Any]]
-    durations: Optional[Dict[str, float]] = None
-    topics_table: Optional[List[Dict[str, Any]]] = None
-    total_processing_time: Optional[float] = None
-    total_creatives_in_group: Optional[int]
-    color_class_distribution: Optional[Dict[str, float]] = None
-    topic_color_distribution: Optional[Dict[str, List[Dict[str, Any]]]] = None
-
-class UploadResponse(BaseModel):
-    uploaded: int
-    group_id: str
-    errors: List[str]
-
-
-class UploadRequest(BaseModel):
-    creative_ids: list[str]
-    original_filenames: list[str]

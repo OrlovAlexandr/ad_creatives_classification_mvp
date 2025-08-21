@@ -1,63 +1,38 @@
 from celery import Celery
-from config import (
-    REDIS_URL, MINIO_PUBLIC_URL, MINIO_BUCKET, MINIO_ACCESS_KEY, 
-    MINIO_SECRET_KEY, MINIO_SECURE, MINIO_ENDPOINT,
-    TOPICS, TOPIC_TRANSLATIONS,
-    )
 from database import SessionLocal
-import database
 from minio_client import minio_client
 from PIL import Image
-import numpy as np
-from collections import Counter
 import os
 from datetime import datetime
 import random
 import time
-from color_utils import get_top_colors, classify_colors_by_palette
+from utils.color_utils import get_top_colors, classify_colors_by_palette
+from config import settings, TOPICS, TOPIC_TEXTS, COCO_CLASSES
+from database_models.creative import Creative, CreativeAnalysis
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-TOPIC_TEXTS = {
-    'tableware': 'НАБОР ИЗ НЕРЖАВЕЙКИ. ПОСУДА ДЛЯ КУХНИ. 10 ПРЕДМЕТОВ',
-    'ties': 'ШЕЛКОВЫЙ ГАЛСТУК. КЛАССИКА. ПОДАРОК МУЖЧИНЕ',
-    'bags': 'ЛЕДИ-СУМКА 2025. КОЖА, ЗАСТЕЖКА, ВМЕСТИТЕЛЬНО',
-    'cups': 'ФИРМЕННАЯ КЕРАМИКА. ПОДАРОК К ПРАЗДНИКУ. НЕ ТЕРЯЕТ ЦВЕТ',
-    'clocks': 'SMART WATCH 8 СЕРИИ. ДОПУСК УВЕДОМЛЕНИЙ. МОЩНАЯ БАТАРЕЯ'
-}
-
-COCO_CLASSES = [
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
-    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
-    "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
-    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
-    "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
-    "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
-]
-
-celery = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)
+celery = Celery("tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
 
-# Имитация ML-обработки
 @celery.task(bind=True, max_retries=3)
 def process_creative(self, creative_id: str):
     db = SessionLocal()
     temp_local_path = None
     try:
-        creative = db.query(database.Creative).filter(
-            database.Creative.creative_id == creative_id
+        creative = db.query(Creative).filter(
+            Creative.creative_id == creative_id
             ).first()
         if not creative:
             raise Exception("Креатив не найден")
         
-        analysis = db.query(database.CreativeAnalysis).filter(
-            database.CreativeAnalysis.creative_id == creative_id).first()
+        analysis = db.query(CreativeAnalysis).filter(
+            CreativeAnalysis.creative_id == creative_id).first()
 
         if not analysis:
-            analysis = database.CreativeAnalysis(creative_id=creative_id)
+            analysis = CreativeAnalysis(creative_id=creative_id)
             db.add(analysis)
 
         analysis.overall_status = "PROCESSING"
@@ -68,7 +43,7 @@ def process_creative(self, creative_id: str):
             object_name = f"{creative_id}.{creative.file_format}"
             temp_local_path = f"/tmp/{creative_id}.{creative.file_format}"
 
-            response = minio_client.get_object(MINIO_BUCKET, object_name)
+            response = minio_client.get_object(settings.MINIO_BUCKET, object_name)
             with open(temp_local_path, "wb") as f:
                 f.write(response.read())
 
@@ -208,8 +183,8 @@ def process_creative(self, creative_id: str):
 
     except Exception as exc:
         db.rollback()
-        analysis = db.query(database.CreativeAnalysis).filter(
-            database.CreativeAnalysis.creative_id == creative_id).first()
+        analysis = db.query(CreativeAnalysis).filter(
+            CreativeAnalysis.creative_id == creative_id).first()
         if analysis:
             analysis.overall_status = "ERROR"
             analysis.error_message = str(exc)
