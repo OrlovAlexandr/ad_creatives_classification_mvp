@@ -26,7 +26,7 @@ MIN_COLUMNS = 1
 
 # Перевод тематик
 TOPIC_TRANSLATIONS = {
-    'tableware': 'Ст. приборы',
+    'cutlery': 'Ст. приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Чашки',

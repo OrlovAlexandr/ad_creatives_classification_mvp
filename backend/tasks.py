@@ -2,7 +2,7 @@ from celery import Celery
 from database import SessionLocal
 import os
 from datetime import datetime
-from config import settings, DOMINANT_COLORS_COUNT, SECONDARY_COLORS_COUNT
+from config import settings
 from utils.minio_utils import download_file_from_minio
 from services.processing_service import get_creative_and_analysis, get_image_dimensions
 from ml_models import (
@@ -62,9 +62,6 @@ def process_creative(self, creative_id: str):
             analysis, 
             db, 
             temp_local_path, 
-            n_dominant=DOMINANT_COLORS_COUNT, 
-            n_secondary=SECONDARY_COLORS_COUNT, 
-            n_coeff=1,
             )
         
         # Завершение

@@ -2,7 +2,12 @@ from datetime import datetime
 import streamlit as st
 
 
-from pages import page_upload, page_analytics, page_details
+from pages import (
+    page_upload, 
+    page_analytics, 
+    page_details, 
+    page_settings
+    )
 
 st.set_page_config(page_title="Классификатор креативов", layout="wide")
 
@@ -12,6 +17,7 @@ page = st.navigation(
             st.Page(page_upload, title="Загрузка"),
             st.Page(page_analytics, title="Аналитика"),
             st.Page(page_details, title="Детали креатива"),
+            st.Page(page_settings, title="Настройки"),
         ]
     }
 )

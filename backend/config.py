@@ -18,10 +18,10 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Константы для тематик
-TOPICS = ['tableware', 'ties', 'bags', 'cups', 'clocks']
+TOPICS = ['cutlery', 'ties', 'bags', 'cups', 'clocks']
 
 TOPIC_TRANSLATIONS = {
-    'tableware': 'Ст. приборы',
+    'cutlery': 'Ст. приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Чашки',
@@ -29,7 +29,7 @@ TOPIC_TRANSLATIONS = {
 }
 
 TOPIC_TEXTS = {
-    'tableware': 'НАБОР ИЗ НЕРЖАВЕЙКИ. ПОСУДА ДЛЯ КУХНИ. 10 ПРЕДМЕТОВ',
+    'cutlery': 'НАБОР ИЗ НЕРЖАВЕЙКИ. ПОСУДА ДЛЯ КУХНИ. 10 ПРЕДМЕТОВ',
     'ties': 'ШЕЛКОВЫЙ ГАЛСТУК. КЛАССИКА. ПОДАРОК МУЖЧИНЕ',
     'bags': 'ЛЕДИ-СУМКА 2025. КОЖА, ЗАСТЕЖКА, ВМЕСТИТЕЛЬНО',
     'cups': 'ФИРМЕННАЯ КЕРАМИКА. ПОДАРОК К ПРАЗДНИКУ. НЕ ТЕРЯЕТ ЦВЕТ',
@@ -49,7 +49,7 @@ COCO_CLASSES = [
     "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
 ]
 
-# Константы для цветового анализа
+# Дефолты для цветового анализа
 DOMINANT_COLORS_COUNT = 3
 SECONDARY_COLORS_COUNT = 3
 
