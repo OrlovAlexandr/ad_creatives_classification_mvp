@@ -1,16 +1,13 @@
-#!/bin/sh
-
-# Ожидание готовности MinIO
 until mc alias set minio http://minio:9000 "${MINIO_ACCESS_KEY}" "${MINIO_SECRET_KEY}"; do
     echo "Waiting for MinIO..."
     sleep 1
 done
 
-# Создаем бакеты
+# Бакеты
 mc mb minio/creatives --ignore-existing
 mc mb minio/models --ignore-existing
 
-# Устанавливаем политики доступа
+# Политики доступа
 mc anonymous set none minio/creatives
 mc anonymous set public minio/creatives
 

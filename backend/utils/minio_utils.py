@@ -25,7 +25,7 @@ def download_file_from_minio(creative, analysis, db, temp_local_path: str):
     """Скачивает файл креатива из MinIO."""
     try:
         object_name = f"{creative.creative_id}.{creative.file_format}"
-        # Убедитесь, что папка /tmp существует
+        
         os.makedirs(os.path.dirname(temp_local_path), exist_ok=True)
         response = minio_client.get_object(settings.MINIO_BUCKET, object_name)
         with open(temp_local_path, "wb") as f:

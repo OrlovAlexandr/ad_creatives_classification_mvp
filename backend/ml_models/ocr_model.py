@@ -64,6 +64,7 @@ def extract_text_and_blocks(image_path: str, creative) -> tuple[str, list]:
             normalized_bbox = [
                 [point[0] / img_width, point[1] / img_height] for point in bbox
             ]
+            normalized_bbox = normalized_bbox[0] + normalized_bbox[1]
             print("normalized_bbox", normalized_bbox)        
 
             ocr_blocks.append({
