@@ -36,15 +36,16 @@
 - палитра доминирующих цветов;
 - текст с координатами.
 ![Детали креатива](screenshots/details.gif)
+
 ---
 
 # Запуск
-
+```
 git clone https://github.com/OrlovAlexandr/ad_creatives_classification_mvp.git
 cd creatives-mvp
 cp .env.example .env
 docker-compose up --build
-
+```
 Веса модели можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ).
 
 ---
