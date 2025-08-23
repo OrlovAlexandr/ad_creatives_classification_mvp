@@ -23,7 +23,7 @@ def page_details():
     group_display_map = {g["group_id"]: g["display_name"] for g in groups}
     group_ids = list(group_display_map.keys())
 
-    default_index = 0 if group_ids else None  # бэк уже сортирует
+    default_index = 0 if group_ids else None
 
     selected_group = st.selectbox(
         "Выберите группу",
@@ -36,7 +36,6 @@ def page_details():
     if not selected_group:
         return
 
-    # Получаем креативы
     with st.spinner("Загрузка креативов..."):
         creatives = fetch_creatives_by_group(selected_group)
 

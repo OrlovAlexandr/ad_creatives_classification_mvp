@@ -29,17 +29,3 @@ def yolo_top1_topic_for_bert(classes: list, confs: list) -> str:
     top_cls = classes[max_conf_idx]
     ic("Топ-1 тема YOLO:", top_cls)
     return map_coco_to_topic(top_cls)
-
-# Пример использования
-# if __name__ == "__main__":
-#     test_text = "SMART WATCH 8 СЕРИИ. ДОПУСК УВЕДОМЛЕНИЙ. МОЩНАЯ БАТАРЕЯ"
-#     cleaned = clean_text_for_bert(test_text)
-#     print(f"Очищенный текст: {cleaned}")
-#     
-#     test_yolo_classes = ['clock', 'cell phone']
-#     test_yolo_confs = [0.85, 0.45]
-#     vec = yolo_to_vector_for_bert(test_yolo_classes, test_yolo_confs)
-#     print(f"Вектор YOLO (первые 10): {vec[:10]}")
-#     
-#     top1_topic = yolo_top1_topic_for_bert(test_yolo_classes, test_yolo_confs)
-#     print(f"Топ-1 тема: {top1_topic}")

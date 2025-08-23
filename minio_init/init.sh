@@ -9,7 +9,6 @@ mc mb minio/models --ignore-existing
 
 mc anonymous set none minio/creatives
 mc anonymous set public minio/creatives
-# mc anonymous set public minio/models
 
 # Копируем начальные данные 
 mc cp /minio_init/creatives/default.jpg minio/creatives/

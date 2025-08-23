@@ -8,9 +8,6 @@ from services.processing_service import (
     get_creative_and_analysis, 
     get_image_dimensions,
     )
-# from ml_models import (
-#     perform_classification, perform_color_analysis, perform_ocr, perform_detection
-# )
 from services.processing_service import perform_classification, perform_color_analysis, perform_ocr, perform_detection
 from services.model_loader import load_models
 
@@ -55,7 +52,7 @@ def process_creative(self, creative_id: str):
             db.commit()
             return {"status": "error", "creative_id": creative_id}
         
-        creative.image_height, creative.image_width = dimensions
+        creative.image_width, creative.image_height = dimensions
         db.add(creative)
         db.commit()
 

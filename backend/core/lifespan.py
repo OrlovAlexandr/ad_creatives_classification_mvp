@@ -8,7 +8,7 @@ from database_models.app_settings import AppSettings
 from database import SessionLocal
 
 logger = logging.getLogger(__name__)
-from config import DOMINANT_COLORS_COUNT, SECONDARY_COLORS_COUNT # Импортируем дефолтные значения
+from config import DOMINANT_COLORS_COUNT, SECONDARY_COLORS_COUNT
 
 def initialize_default_settings(db: Session):
     default_settings = [

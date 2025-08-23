@@ -75,7 +75,6 @@ async def upload_files(
                 image_height=height
             )
 
-            # Запуск фоновой задачи
             process_creative.delay(creative_id)
 
             uploaded += 1

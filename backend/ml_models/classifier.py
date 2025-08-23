@@ -46,7 +46,6 @@ class MultiModalBertClassifier(nn.Module):
         return {'loss': loss, 'logits': logits}
 
 
-# --- Глобальные переменные для модели и токенизатора (кеширование) ---
 _bert_model = None
 _bert_tokenizer = None
 
@@ -150,55 +149,3 @@ def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, float
     except Exception as e:
         logger.error(f"Ошибка при классификации креатива: {e}", exc_info=True)
         return None, 0.0
-
-# Пример использования (для тестирования модуля отдельно)
-# if __name__ == "__main__":
-#     # Пример данных
-#     test_ocr_text = "SMART WATCH 8 СЕРИИ. ДОПУСК УВЕДОМЛЕНИЙ. МОЩНАЯ БАТАРЕЯ"
-#     test_detected_objects = [
-#         {"class": "clock", "confidence": 0.85},
-#         {"class": "cell phone", "confidence": 0.45}
-#     ]
-#     
-#     # Убедитесь, что MODEL_CACHE_DIR и BERT_MODEL_PATH установлены в settings
-#     # и модель находится по этому пути
-#     topic, conf = classify_creative(test_ocr_text, test_detected_objects)
-#     print(f"Предсказанная тема: {topic}, Уверенность: {conf}")
-
-
-# def perform_classification(
-#         creative_id: str, 
-#         analysis, 
-#         db,
-#         ):
-#     """Выполняет классификацию."""
-#     logger.info(f"[{creative_id}] Начало классификации...")
-#     analysis.classification_status = "PROCESSING"
-#     analysis.classification_started_at = datetime.utcnow()
-#     db.commit() # Коммитим статус PROCESSING
-
-#     try:
-#         # Имитация классификации
-#         time.sleep(random.uniform(0.5, 3.0))
-#         topic = random.choice(TOPICS)
-#         analysis.topic = topic
-
-#         topic_confidence = round(random.uniform(0.6, 0.95), 2)
-#         analysis.main_topic = topic
-#         analysis.topic_confidence = topic_confidence
-#         analysis.classification_status = "SUCCESS"
-
-#         analysis.classification_сompleted_at = datetime.utcnow()
-#         analysis.classification_duration = (
-#             analysis.classification_сompleted_at - analysis.classification_started_at
-#             ).total_seconds()
-#         db.commit()
-#     except Exception as e:
-#         logger.error(f"[{creative_id}] Ошибка в классификации: {str(e)}")
-#         analysis.classification_status = "ERROR"
-#         analysis.classification_сompleted_at = datetime.utcnow()
-#         analysis.classification_duration = (
-#             analysis.classification_сompleted_at - analysis.classification_started_at
-#             ).total_seconds()
-#         db.commit()
-#         raise

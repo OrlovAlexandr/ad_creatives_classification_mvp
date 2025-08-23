@@ -18,13 +18,11 @@ else:
 
 MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL") or MINIO_BASE_URL
 
-# Настройки отображения
 THUMBNAIL_WIDTH = 120
 ESTIMATED_CONTENT_WIDTH = 1000
 MAX_COLUMNS = 10
 MIN_COLUMNS = 1
 
-# Перевод тематик
 TOPIC_TRANSLATIONS = {
     'cutlery': 'Ст. приборы',
     'ties': 'Галстуки',
