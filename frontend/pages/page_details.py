@@ -5,9 +5,12 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 from components.visualizer import draw_bounding_boxes
 from components.color_block import color_block_horizontal
-from config import TOPIC_TRANSLATIONS, MINIO_BUCKET, MINIO_PUBLIC_URL
+from config import TOPIC_TRANSLATIONS, MINIO_BUCKET, MINIO_PUBLIC_URL, MINIO_ENDPOINT
 from services.fetchers import fetch_creatives_by_group, fetch_creative_details, fetch_groups
 from utils.helpers import is_image_available
+import logging
+
+logger = logging.getLogger(__name__)
 
 def page_details():
     st.header("Детали креатива")
@@ -106,14 +109,15 @@ def page_details():
         st.divider()
         st.subheader(f"Детали креатива: {selected_creative_id}")
 
-        minio_image_url = f"{MINIO_PUBLIC_URL}/{data['file_path']}"
-        if is_image_available(minio_image_url):
+        minio_image_url = f"{data['file_path']}"
+        minio_endpoint_url = minio_image_url.replace(MINIO_PUBLIC_URL, MINIO_ENDPOINT)
+        if is_image_available(minio_endpoint_url):
             try:
                 ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
                 detected_objects = data.get("analysis", {}).get("detected_objects", [])
 
                 image_with_boxes = draw_bounding_boxes(
-                    image_path_or_url=minio_image_url,
+                    image_path_or_url=minio_endpoint_url,
                     ocr_blocks=ocr_blocks,
                     detected_objects=detected_objects
                 )
@@ -121,9 +125,11 @@ def page_details():
                 st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
 
             except Exception as e:
+                logger.error(f"Ошибка при отрисовке: {e}")
                 st.error(f"Ошибка при отрисовке: {e}")
                 st.image(minio_image_url, width=300, caption="Оригинал")
         else:
+            logger.warning(f"Изображение недоступно: {minio_image_url}")
             st.warning("Изображение недоступно")
             st.code(minio_image_url)
 

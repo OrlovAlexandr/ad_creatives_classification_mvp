@@ -5,8 +5,8 @@ services:
     image: minio/minio
     container_name: minio
     ports:
-      - "9000:9000"  # API порт
-      - "9001:9001"  # Console порт
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
@@ -26,17 +26,15 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    volumes:
+    - ./minio_init:/minio_init
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_BUCKET: ${MINIO_BUCKET:-creatives}
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
-      mc mb myminio/$${MINIO_BUCKET} --ignore-existing;
-      mc anonymous set public myminio/$${MINIO_BUCKET};
-      echo 'MinIO initialization completed successfully';
-      "
+      MODEL_MINIO_BUCKET: ${MODEL_MINIO_BUCKET:-models}
+    entrypoint: ["/bin/sh", "/minio_init/init-script.sh"]
+
   db:
     image: postgres:15
     env_file:
@@ -112,7 +110,8 @@ services:
       minio:
         condition: service_healthy
     volumes:
-      - uploads:/app/uploads:shared
+      - uploads:/app/uploads
+      - model_cache:/app/models
     restart: unless-stopped
 
   frontend:
@@ -134,3 +133,4 @@ volumes:
   postgres_data:
   uploads:
   minio_data:
+  model_cache:

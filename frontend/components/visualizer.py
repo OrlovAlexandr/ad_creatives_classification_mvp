@@ -35,7 +35,7 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
 
     # Загружаем изображение
     try:
-        ic(f"Загрузка изображения: {img_source}")
+        ic(f"Загрузка изображения до отрисовки: {img_source}")
 
         if img_source.startswith(('http://', 'https://')):
             # Загрузка по URL            
@@ -52,10 +52,13 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
         h, w, _ = img_array.shape
         img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     except requests.RequestException as e:
+        ic("Ошибка при загрузке изображения по URL", img_source)
         raise RuntimeError(f"Ошибка сети при загрузке {img_source}: {e}")
     except (FileNotFoundError, OSError) as e:
+        ic("Ошибка при загрузке изображения из локального файла", img_source)
         raise RuntimeError(f"Не удалось открыть файл {img_source}: {e}")
     except Exception as e:
+        ic("Неизвестная ошибка при загрузке изображения", img_source)
         raise RuntimeError(f"Неизвестная ошибка при загрузке {img_source}: {e}")
 
     # Рисуем OCR-рамки
@@ -85,6 +88,7 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
 
     # Конвертируем обратно в RGB
     img_with_boxes = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
+    ic(img_with_boxes.shape)
     return Image.fromarray(img_with_boxes)
 
 

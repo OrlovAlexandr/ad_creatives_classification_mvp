@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from database_models.creative import Creative, CreativeAnalysis
 from models import CreativeBase, CreativeDetail
+from config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,13 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
     else:
         raise HTTPException(status_code=404, detail="Анализ не нашелся")
 
+    public_file_url = f"{settings.MINIO_PUBLIC_URL}/{creative.file_path}"
+
     creative_data = {
         "creative_id": creative.creative_id,
         "group_id": creative.group_id,
         "original_filename": creative.original_filename,
-        "file_path": creative.file_path,
+        "file_path": public_file_url,
         "file_size": creative.file_size,
         "file_format": creative.file_format,
         "image_width": creative.image_width,

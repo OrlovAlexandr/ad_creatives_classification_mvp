@@ -1,6 +1,8 @@
 import os
 from pydantic_settings import BaseSettings
+import logging
 
+logger = logging.getLogger("config")
 
 class Settings(BaseSettings):
     DATABASE_URL: str
@@ -9,13 +11,27 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str
     MINIO_SECURE: bool = False
     MINIO_BUCKET: str = "creatives"
+    MINIO_PUBLIC_URL: str
     BACKEND_CORS_ORIGINS: list = ["http://localhost:8501"]
     REDIS_URL: str
+
+    MODEL_CACHE_DIR: str
+    MODEL_MINIO_BUCKET: str
+    YOLO_MODEL_PATH: str
+    EASYOCR_WEIGHTS_DIR: str
+    BERT_MODEL_PATH: str
+    DEVICE: str = "cpu"
 
     class Config:
         env_file = ".env"
 
 settings = Settings()
+
+
+logger.info("Загруженные настройки:")
+for key, value in settings.model_dump().items():
+    logger.info(f"  {key}: {value}")
+
 
 # Константы для тематик
 TOPICS = ['cutlery', 'ties', 'bags', 'cups', 'clocks']

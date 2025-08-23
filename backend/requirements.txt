@@ -7,8 +7,20 @@ Pillow
 python-multipart
 pydantic
 python-dotenv
+pandas
 numpy
 minio
 scikit-learn
 icecream
 pydantic-settings
+
+torch
+torchvision
+torchaudio
+ultralytics
+# easyocr
+opencv-python-headless
+PyYAML
+transformers
+pymorphy3
+razdel

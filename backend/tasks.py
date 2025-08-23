@@ -8,6 +8,8 @@ from services.processing_service import get_creative_and_analysis, get_image_dim
 from ml_models import (
     perform_classification, perform_color_analysis, perform_ocr, perform_detection
 )
+from services.model_loader import load_models
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 celery = Celery("tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
+logger.info("Инициализация ML моделей...")
+if not load_models():
+    logger.error("Критическая ошибка при загрузке моделей. Worker может работать некорректно.")
+    # Можно добавить raise Exception или другую логику обработки ошибки
+else:
+    logger.info("ML модели готовы к использованию.")
 
 @celery.task(bind=True, max_retries=3)
 def process_creative(self, creative_id: str):
