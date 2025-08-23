@@ -63,10 +63,14 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
 
     # Рисуем OCR-рамки
     for block in ocr_blocks:
-        bbox = block.get("bbox")
-        if not bbox or len(bbox) != 4:
+        bbox_raw = block.get("bbox")
+        if not bbox_raw or len(bbox_raw) != 4:
             continue
-        x1, y1, x2, y2 = int(bbox[0] * w), int(bbox[1] * h), int(bbox[2] * w), int(bbox[3] * h)
+
+        normalized_bbox = _normalize_bbox(bbox_raw, w, h)
+        if normalized_bbox is None:
+            continue
+        x1, y1, x2, y2 = normalized_bbox
         cv2.rectangle(img_cv, (x1, y1), (x2, y2), ocr_color, 2)
 
         confidence = block.get("confidence", 0.0)
@@ -75,10 +79,11 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
 
     # Рисуем объекты
     for obj in detected_objects:
-        bbox = obj.get("bbox")
-        if not bbox or len(bbox) != 4:
+        bbox_raw = obj.get("bbox")
+        normalized_bbox = _normalize_bbox(bbox_raw, w, h)
+        if normalized_bbox is None:
             continue
-        x1, y1, x2, y2 = int(bbox[0] * w), int(bbox[1] * h), int(bbox[2] * w), int(bbox[3] * h)
+        x1, y1, x2, y2 = normalized_bbox
         cv2.rectangle(img_cv, (x1, y1), (x2, y2), obj_color, 2)
 
         class_name = obj.get("class", "unknown")
@@ -122,3 +127,31 @@ def _draw_label(image_cv, text, position, bg_color, text_color):
         font_thickness,
         cv2.LINE_AA
     )
+
+def _normalize_bbox(bbox, img_width, img_height):
+    if not bbox or not isinstance(bbox, list):
+        return None
+
+    try:
+        if len(bbox) == 4:
+            if isinstance(bbox[0], (int, float)):
+                x1_norm, y1_norm, x2_norm, y2_norm = bbox
+                x1 = int(x1_norm * img_width)
+                y1 = int(y1_norm * img_height)
+                x2 = int(x2_norm * img_width)
+                y2 = int(y2_norm * img_height)
+                return (x1, y1, x2, y2)
+            elif isinstance(bbox[0], list) and len(bbox[0]) == 2:
+                points = np.array(bbox)
+                x_coords = points[:, 0] * img_width
+                y_coords = points[:, 1] * img_height
+                x1 = int(np.min(x_coords))
+                y1 = int(np.min(y_coords))
+                x2 = int(np.max(x_coords))
+                y2 = int(np.max(y_coords))
+                return (x1, y1, x2, y2)
+    except (ValueError, IndexError, TypeError) as e:
+        ic(f"Ошибка нормализации bbox {bbox}: {e}")
+        pass
+        
+    return None

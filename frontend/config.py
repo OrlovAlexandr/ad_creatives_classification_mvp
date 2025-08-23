@@ -29,7 +29,7 @@ TOPIC_TRANSLATIONS = {
     'cutlery': 'Ст. приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
-    'cups': 'Чашки',
+    'cups': 'Кружки',
     'clocks': 'Часы'
 }
 

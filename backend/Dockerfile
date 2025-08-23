@@ -1,11 +1,35 @@
-FROM python:3.10-slim
+FROM nvidia/cuda:11.8.0-devel-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.10 \
+        python3.10-dev \
+        python3.10-distutils \
+        python3-pip \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev \
+        libgomp1 \
+        libgl1-mesa-glx \
+        build-essential \
+        curl && \
+    ln -sf /usr/bin/python3.10 /usr/bin/python && \
+    python -m pip install --upgrade pip && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-RUN pip install --upgrade pip
-
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install --no-cache-dir \
+    torch==2.7.1+cu118 \
+    torchvision==0.22.1+cu118 \
+    torchaudio==2.7.1+cu118 \
+    --extra-index-url https://download.pytorch.org/whl/cu118 && \
+    pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

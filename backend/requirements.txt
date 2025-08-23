@@ -18,9 +18,12 @@ torch
 torchvision
 torchaudio
 ultralytics
-# easyocr
+easyocr
 opencv-python-headless
 PyYAML
 transformers
 pymorphy3
 razdel
+
+uvicorn[standard]
+click

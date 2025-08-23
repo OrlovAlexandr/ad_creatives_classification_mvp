@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     YOLO_MODEL_PATH: str
     EASYOCR_WEIGHTS_DIR: str
     BERT_MODEL_PATH: str
+    BERT_TOKENIZER_NAME: str = "sberbank-ai/ruBERT-base"
     DEVICE: str = "cpu"
 
     class Config:
@@ -40,7 +41,7 @@ TOPIC_TRANSLATIONS = {
     'cutlery': 'Ст. приборы',
     'ties': 'Галстуки',
     'bags': 'Сумки',
-    'cups': 'Чашки',
+    'cups': 'Кружки',
     'clocks': 'Часы'
 }
 
@@ -53,17 +54,50 @@ TOPIC_TEXTS = {
 }
 
 COCO_CLASSES = [
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
-    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat",
-    "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack",
-    "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball",
-    "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket",
-    "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake",
-    "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop",
-    "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"
+    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
+    "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog",
+    "horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella",
+    "handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite",
+    "baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle",
+    "wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich",
+    "orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch",
+    "potted plant","bed","dining table","toilet","tv","laptop","mouse","remote",
+    "keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book",
+    "clock","vase","scissors","teddy bear","hair drier","toothbrush"
 ]
+
+NUM_COCO = len(COCO_CLASSES)
+COCO_CLASS_TO_IDX = {c: i for i, c in enumerate(COCO_CLASSES)}
+
+CONF_THRESHOLD = 0.35
+
+# Маппинг тем из названий файлов
+TOPIC_FILE_MAPPING = {
+    'bag': 'Сумки',
+    'cutlery': 'Столовые_приборы',
+    'clock': 'Часы',
+    'cup': 'Кружки',
+    'tie': 'Галстуки'
+}
+
+NUM_LABELS = len(TOPICS)
+
+# Маппинг из COCO классов в темы проекта
+def map_coco_to_topic(coco_class: str) -> str:
+    """Маппинг класса COCO в тему проекта."""
+    if coco_class in ['handbag', 'backpack', 'suitcase', 'truck']: # Добавил truck из аннотаций
+        return 'Сумки'
+    if coco_class in ['fork', 'knife', 'spoon', 'bowl', 'wine glass']:
+        return 'Столовые_приборы'
+    if coco_class == 'clock':
+        return 'Часы'
+    if coco_class in ['cup']:
+        return 'Кружки'
+    if coco_class == 'tie':
+        return 'Галстуки'
+    return None
+
+
 
 # Дефолты для цветового анализа
 DOMINANT_COLORS_COUNT = 3
