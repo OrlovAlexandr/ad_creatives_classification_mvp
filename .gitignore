@@ -1,0 +1,9 @@
+/.env
+venv
+.vscode
+collect_code.py
+minio_init/models/best_multimodal_bert.pt
+minio_init/models/yolov8m.pt
+minio_init/models/easy_ocr/model/cyrillic_g2.pth
+minio_init/models/easy_ocr/model/craft_mlt_25k.pth
+minio_init/models/easy_ocr/model/english_g2.pth
