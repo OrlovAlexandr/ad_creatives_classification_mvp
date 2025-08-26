@@ -13,6 +13,7 @@ from services.processing_service import (
     perform_ocr, 
     perform_detection
     )
+from services.processing_service import perform_classification, perform_color_analysis, perform_ocr, perform_detection
 from ml_models import ocr_model, yolo_detector, classifier
 from services.model_loader import load_models
 
