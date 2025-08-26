@@ -23,7 +23,7 @@ def page_details():
     group_display_map = {g["group_id"]: g["display_name"] for g in groups}
     group_ids = list(group_display_map.keys())
 
-    default_index = 0 if group_ids else None  # бэк уже сортирует
+    default_index = 0 if group_ids else None
 
     selected_group = st.selectbox(
         "Выберите группу",
@@ -36,7 +36,6 @@ def page_details():
     if not selected_group:
         return
 
-    # Получаем креативы
     with st.spinner("Загрузка креативов..."):
         creatives = fetch_creatives_by_group(selected_group)
 
@@ -152,6 +151,8 @@ def page_details():
 
         ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
         if ocr_blocks:
+            print("Блоки текста:", ocr_blocks)
+            print("Тип блоков:", type(ocr_blocks))
             st.write("Блоки текста:")
             st.dataframe(pd.DataFrame(ocr_blocks))
         else:
@@ -159,6 +160,8 @@ def page_details():
 
         detected_objects = data.get('analysis', {}).get('detected_objects', [])
         if detected_objects:
+            print("Обнаруженные объекты:", detected_objects)
+            print("Тип объектов:", type(detected_objects))
             st.subheader("Обнаруженные объекты")
             st.dataframe(pd.DataFrame(detected_objects))
         else:

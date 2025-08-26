@@ -91,7 +91,7 @@ services:
     build: ./backend
     env_file:
       - .env
-    command: celery -A tasks worker -l info
+    command: celery -A tasks worker --loglevel=info --concurrency=2
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}

@@ -45,12 +45,6 @@ def upload_files(files, group_id, creative_ids, original_filenames):
         "original_filenames": original_filenames
     }
 
-    # Попробовать потом убрать блок кода, выше раскомментить
-    # for i, cid in enumerate(creative_ids):
-    #     data[f"creative_ids"] = creative_ids  # FastAPI автоматически соберёт список
-    # for i, name in enumerate(original_filenames):
-    #     data.setdefault("original_filenames", []).append(name)
-    
     try:
         response = requests.post(url, files=files_data, data=data)
         response.raise_for_status()

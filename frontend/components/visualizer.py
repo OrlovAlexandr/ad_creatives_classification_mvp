@@ -66,7 +66,9 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
         bbox = block.get("bbox")
         if not bbox or len(bbox) != 4:
             continue
+        ic("bbox relative", bbox)
         x1, y1, x2, y2 = int(bbox[0] * w), int(bbox[1] * h), int(bbox[2] * w), int(bbox[3] * h)
+        ic("bbox absolute", x1, y1, x2, y2)
         cv2.rectangle(img_cv, (x1, y1), (x2, y2), ocr_color, 2)
 
         confidence = block.get("confidence", 0.0)

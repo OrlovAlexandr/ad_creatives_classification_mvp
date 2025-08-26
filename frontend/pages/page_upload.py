@@ -76,7 +76,7 @@ def page_upload():
                 st.session_state.uploaded_creatives = creative_ids
                 st.session_state.selected_files = [] 
                 st.session_state.uploader_key = str(uuid.uuid4())
-                st.session_state.pop("current_group_id", None)  # Очищаем прежний Group ID
+                st.session_state.pop("current_group_id", None)
                 fetch_groups.clear()
                 st.rerun()
             else:
