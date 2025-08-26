@@ -6,6 +6,9 @@ from io import BytesIO
 from icecream import ic
 import os
 from dotenv import load_dotenv
+import logging
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -21,9 +24,10 @@ else:
     MINIO_BASE_URL = f"http://{MINIO_ENDPOINT}"
 MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL")
 if not MINIO_PUBLIC_URL:
-    MINIO_PUBLIC_URL = MINIO_BASE_URL 
+    MINIO_PUBLIC_URL = MINIO_BASE_URL
 
-def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None, 
+
+def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
                         detected_objects=None,
                         ocr_color=(0, 255, 0), obj_color=(0, 255, 255)):
     if ocr_blocks is None: ocr_blocks = []
@@ -48,17 +52,17 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
             image = Image.open(img_source).convert("RGB")
 
         img_array = np.array(image)
-        ic(img_array.shape)
+        logger.debug(f"Размер массива изображения: {img_array.shape}")
         h, w, _ = img_array.shape
         img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     except requests.RequestException as e:
-        ic("Ошибка при загрузке изображения по URL", img_source)
+        logger.error(f"Ошибка при загрузке {img_source}: {e}")
         raise RuntimeError(f"Ошибка сети при загрузке {img_source}: {e}")
     except (FileNotFoundError, OSError) as e:
-        ic("Ошибка при загрузке изображения из локального файла", img_source)
+        logger.error(f"Ошибка при загрузке изображения из локального файла {img_source}: {e}")
         raise RuntimeError(f"Не удалось открыть файл {img_source}: {e}")
     except Exception as e:
-        ic("Неизвестная ошибка при загрузке изображения", img_source)
+        logger.error(f"Неизвестная ошибка при загрузке изображения {img_source}: {e}")
         raise RuntimeError(f"Неизвестная ошибка при загрузке {img_source}: {e}")
 
     # Рисуем OCR-рамки
@@ -122,4 +126,3 @@ def _draw_label(image_cv, text, position, bg_color, text_color):
         font_thickness,
         cv2.LINE_AA
     )
-

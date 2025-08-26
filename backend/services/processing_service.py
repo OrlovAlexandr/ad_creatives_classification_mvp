@@ -29,7 +29,7 @@ def get_creative_and_analysis(
 def get_image_dimensions(temp_local_path: str) -> tuple[bool, tuple[int, int]]:
     try:
         with Image.open(temp_local_path) as img:
-            return True, img.size # (width, height)
+            return True, img.size
     except Exception as e:
         logger.error("Ошибка чтения изображения {temp_local_path}: {e}")
         

@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.signals import worker_ready
 from database import SessionLocal
 import os
 from datetime import datetime
@@ -7,11 +8,12 @@ from utils.minio_utils import download_file_from_minio
 from services.processing_service import (
     get_creative_and_analysis, 
     get_image_dimensions,
+    perform_classification, 
+    perform_color_analysis, 
+    perform_ocr, 
+    perform_detection
     )
-# from ml_models import (
-#     perform_classification, perform_color_analysis, perform_ocr, perform_detection
-# )
-from services.processing_service import perform_classification, perform_color_analysis, perform_ocr, perform_detection
+from ml_models import ocr_model, yolo_detector, classifier
 from services.model_loader import load_models
 
 import logging
@@ -23,9 +25,29 @@ celery = Celery("tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
 logger.info("Инициализация ML моделей...")
 if not load_models():
-    logger.error("Критическая ошибка при загрузке моделей. Worker может работать некорректно.")
+    logger.error("Критическая ошибка при копировании моделей. Worker может работать некорректно.")
 else:
     logger.info("ML модели готовы к использованию.")
+
+@worker_ready.connect
+def preload_models(**kwargs):
+    logger.info("Celery worker готов. Начинается предзагрузка моделей...")
+    try:
+        logger.info("Предзагрузка EasyOCR...")
+        ocr_model.get_ocr_reader()
+        logger.info("Модель EasyOCR предзагружена.")
+
+        logger.info("Предзагрузка YOLO...")
+        yolo_detector.get_yolo_model()
+        logger.info("Модель YOLO предзагружена.")
+
+        logger.info("Предзагрузка BERT...")
+        classifier.get_bert_model_and_tokenizer()
+        logger.info("Модель BERT предзагружена.")
+
+        logger.info("Все модели успешно Загружены. Worker готов.")
+    except Exception as e:
+        logger.error(f"Ошибка при предзагрузке моделей: {e}", exc_info=True)
 
 @celery.task(bind=True, max_retries=3)
 def process_creative(self, creative_id: str):
@@ -55,7 +77,7 @@ def process_creative(self, creative_id: str):
             db.commit()
             return {"status": "error", "creative_id": creative_id}
         
-        creative.image_height, creative.image_width = dimensions
+        creative.image_width, creative.image_height = dimensions
         db.add(creative)
         db.commit()
 

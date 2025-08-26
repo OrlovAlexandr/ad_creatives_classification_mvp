@@ -1,4 +1,7 @@
 import requests
+import logging
+
+logger = logging.getLogger(__name__)
 
 def get_backend_url():
     from config import BACKEND_URL
@@ -11,5 +14,5 @@ def make_request(method, endpoint, **kwargs):
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"Ошибка запроса к {url}: {e}")
+        logger.error(f"Ошибка запроса к {url}: {e}")
         return None
