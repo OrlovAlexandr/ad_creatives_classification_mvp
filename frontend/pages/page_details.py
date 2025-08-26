@@ -12,18 +12,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def page_details():
     st.header("Детали креатива")
+
+    if "selected_creative_id_from_table" not in st.session_state:
+        st.session_state.selected_creative_id_from_table = None
 
     groups = fetch_groups()
     if not groups:
         st.info("Нет доступных групп")
         return
-    
+
     group_display_map = {g["group_id"]: g["display_name"] for g in groups}
     group_ids = list(group_display_map.keys())
 
-    default_index = 0 if group_ids else None
+    default_index = 0 if group_ids else None  # бэк уже сортирует
 
     selected_group = st.selectbox(
         "Выберите группу",
@@ -34,6 +38,7 @@ def page_details():
     )
 
     if not selected_group:
+        st.session_state.selected_creative_id_from_table = None
         return
 
     with st.spinner("Загрузка креативов..."):
@@ -41,10 +46,11 @@ def page_details():
 
     if not creatives:
         st.info("В этой группе нет креативов.")
+        st.session_state.selected_creative_id_from_table = None
         return
-    
+
     # Табличка с креативами выбранной группы
-    df_creatives = pd.DataFrame([
+    df_display = pd.DataFrame([
         {
             "ID": c["creative_id"],
             "Оригинальное имя": c["original_filename"],
@@ -55,33 +61,30 @@ def page_details():
         }
         for c in creatives
     ])
-    df_creatives.reset_index(drop=True, inplace=True)
 
-    gb = GridOptionsBuilder.from_dataframe(df_creatives)
-    gb.configure_default_column(editable=False, wrapText=True, autoHeight=True)
-    gb.configure_selection(selection_mode="single", use_checkbox=False)
-    gb.configure_grid_options(domLayout="autoHeight", suppressRowClickSelection=False)
+    for index, row in df_display.iterrows():
+        col1, col2, col3, col4, col5, col6 = st.columns([3, 2, 2, 2, 1, 1])
+        with col1:
+            st.write(f"**{row['Оригинальное имя']}**")
+        with col2:
+            st.write(row['Размер'])
+        with col3:
+            st.write(row['Время загрузки'])
+        with col4:
+            st.write(row['Статус'])
+        with col5:
+            if st.button("Детали", key=f"details_btn_{row['ID']}"):
+                st.session_state.selected_creative_id_from_table = row['ID']
+                st.rerun()
 
-    grid_options = gb.build()
+    st.divider()
 
-    grid_response = AgGrid(
-        df_creatives,
-        gridOptions=grid_options,
-        update_mode=GridUpdateMode.SELECTION_CHANGED,
-        height=min(300, 50 * len(df_creatives) + 50),
-        theme="streamlit",
-        key="aggrid_creatives"
-    )
+    selected_creative_id = st.session_state.selected_creative_id_from_table
 
-    selected_rows = grid_response.get("selected_rows", None)
-
-    if selected_rows is not None and len(selected_rows) > 0:
-        row = selected_rows.iloc[0]
-        selected_creative_id = row.get("ID")
-
-        if not selected_creative_id:
-            st.error("Не удалось получить ID креатива.")
-            return
+    if selected_creative_id:
+        if st.button("Назад к списку"):
+            st.session_state.selected_creative_id_from_table = None
+            st.rerun()
 
         st.success(f"Выбран креатив: {selected_creative_id}")
 
@@ -136,12 +139,12 @@ def page_details():
         st.write(f"**Размер:** {data['file_size']} байт")
         st.write(f"**Формат:** {data['file_format']}")
         st.write(f"**Размеры:** {data['image_width']}x{data['image_height']}")
-        st.write(f"**Дата загрузки:** {data['upload_timestamp']}")
+        st.write(f"**Дата загрузки:** {data['upload_timestamp'].split('.')[0].replace('T', ' ')}")
 
         orig_topic = data.get('analysis', {}).get('main_topic', '—')
         translated_topic = TOPIC_TRANSLATIONS.get(
             orig_topic, orig_topic
-            ) if orig_topic != '—' else orig_topic
+        ) if orig_topic != '—' else orig_topic
 
         st.write(f"**Основная тема:** {translated_topic}")
 
@@ -150,20 +153,22 @@ def page_details():
         st.text_area("OCR", ocr_text, height=150)
 
         ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
+
         if ocr_blocks:
-            print("Блоки текста:", ocr_blocks)
-            print("Тип блоков:", type(ocr_blocks))
+            for block in ocr_blocks:
+                block['bbox'] = [round(x, 4) for x in block['bbox']]
+
             st.write("Блоки текста:")
-            st.dataframe(pd.DataFrame(ocr_blocks))
+            st.dataframe(pd.DataFrame(ocr_blocks, columns=['text', 'bbox', 'confidence']))
         else:
             st.info("Текст не распознан.")
 
         detected_objects = data.get('analysis', {}).get('detected_objects', [])
         if detected_objects:
-            print("Обнаруженные объекты:", detected_objects)
-            print("Тип объектов:", type(detected_objects))
+            for obj in detected_objects:
+                obj['bbox'] = [round(x, 4) for x in obj['bbox']]
             st.subheader("Обнаруженные объекты")
-            st.dataframe(pd.DataFrame(detected_objects))
+            st.dataframe(pd.DataFrame(detected_objects, columns=['class', 'bbox', 'confidence']))
         else:
             st.info("Объекты не обнаружены.")
 

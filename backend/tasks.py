@@ -13,7 +13,6 @@ from services.processing_service import (
     perform_ocr, 
     perform_detection
     )
-from services.processing_service import perform_classification, perform_color_analysis, perform_ocr, perform_detection
 from ml_models import ocr_model, yolo_detector, classifier
 from services.model_loader import load_models
 
@@ -36,15 +35,15 @@ def preload_models(**kwargs):
     try:
         logger.info("Предзагрузка EasyOCR...")
         ocr_model.get_ocr_reader()
-        logger.info("Модель EasyOCR загружена.")
+        logger.info("Модель EasyOCR предзагружена.")
 
         logger.info("Предзагрузка YOLO...")
         yolo_detector.get_yolo_model()
-        logger.info("Модель YOLO загружена.")
+        logger.info("Модель YOLO предзагружена.")
 
         logger.info("Предзагрузка BERT...")
         classifier.get_bert_model_and_tokenizer()
-        logger.info("Модель BERT загружена.")
+        logger.info("Модель BERT предзагружена.")
 
         logger.info("Все модели успешно Загружены. Worker готов.")
     except Exception as e:
