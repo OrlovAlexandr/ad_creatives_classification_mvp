@@ -42,11 +42,87 @@
 # Запуск
 ```
 git clone https://github.com/OrlovAlexandr/ad_creatives_classification_mvp.git
-cd creatives-mvp
+cd ad_creatives_classification_mvp
 cp .env.example .env
 docker-compose up --build
 ```
-Веса модели можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ).
+Веса модели и тестовый набор данных можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ).
+
+---
+
+## Структура проекта
+ad_creatives_classification/
+├── backend/                     # FastAPI + ML
+│   ├── main.py                  # Точка входа
+│   ├── api/                     # Роуты: upload, status, analytics...
+│   ├── core/                    # Ядро инициализации
+│   ├── services/                # Бизнес-логика
+│   ├── ml_models/               # Загрузка и инференс моделей
+│   ├── utils/                   # Вспомогательные функции
+│   ├── database_models/         # ORM-модели
+│   ├── models.py                # Pydentic модели
+│   ├── database.py              # Работа с БД
+│   ├── minio_client.py          # Работа с MinIO
+│   ├── celery_worker.py         # Работа с Celery
+│   ├── tasks.py                 # Celery-задачи
+│   ├── config.py                
+│   ├── Dockerfile                
+│   └── requirements.txt
+│
+├── frontend/                    # Streamlit UI
+│   ├── app.py                   # Главный файл
+│   ├── pages/                   # Страницы: загрузка, аналитика, детали, настройки
+│   ├── components/              # UI-компоненты (графики, цвета)
+│   ├── services/                # API-клиенты
+│   ├── utils/                   # Вспомогательные функции
+│   ├── config.py                
+│   ├── Dockerfile                
+│   └── requirements.txt
+│
+├── minio_init/                  # Инициализация MinIO
+│   ├── models/                  # ML-модели (веса)
+│   ├── init.sh                  # Скрипт для dev-окружения
+│   └── init-script.sh           # Скрипт для контейнера
+├── docker-compose.yml           # Оркестрация сервисов
+├── .env.example                 # Пример переменных окружения
+└── README.md
+
+---
+## Используемые технологии и архитектура  
+
+Фронтенд реализован на Streamlit:  
+- `page_upload` – загрузка креативов и отображение статуса обработки  
+- `page_analytics` – аналитика по группам и всем креативам  
+- `page_details` – детали одного креатива с визуализацией  
+
+Бэкенд работает на FastAPI и предоставляет REST API для обработки (`upload`, `status`, `creatives`, `analytics`).  
+В качестве базы данных используется PostgreSQL. Контейнеризация выполнена с помощью Docker и Docker Compose.  
+
+Используемые ML-модели:  
+- YOLOv8 — детекция объектов  
+- EasyOCR — распознавание текста  
+- BERT (RuBERT) — анализ текста и тематики  
+- KMeans (scikit-learn) — анализ цветовой палитры  
+- мультимодальный подход: текст + объекты объединяются в единый вектор для классификации  
+
+Хранилище реализовано на MinIO (изображения и модели). Для асинхронной обработки и параллельных вычислений используется Redis + Celery.  
+
+Визуализация выполнена с помощью Plotly и Streamlit:  
+- сводная аналитика по группам и всем креативам  
+- столбчатые диаграммы по тематикам  
+- круговые диаграммы по цветам  
+- топ-5 цветов по каждой тематике (stacked bar)  
+- таблицы уверенности и времени обработки  
+
+Архитектура системы:  
+Streamlit(ui) <-> FastAPI -> PostgreSQL -> MinIO <-> Redis (Celery)
+
+
+Как работает система:  
+1. Пользователь загружает изображения, они сохраняются во временный каталог и загружаются в MinIO.  
+2. В PostgreSQL создаётся запись о креативе.  
+3. Celery запускает задачу: скачивает данные из MinIO, прогоняет через ML-модели (OCR, YOLO, BERT, KMeans) и сохраняет результаты в базу данных.  
+4. Пользователь через фронтенд получает аналитику: детали одного креатива и сводную статистику по всем данным.  
 
 ---
 
@@ -65,4 +141,3 @@ GET /status/{creative_id}
 GET /analytics/group/{group_id} 
 7. Общая аналитика 
 GET /analytics/all
-
