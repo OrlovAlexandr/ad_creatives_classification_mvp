@@ -2,6 +2,7 @@ from datetime import datetime
 import random
 import time
 import os
+from typing import Any
 
 from config import settings, TOPICS, NUM_COCO, NUM_LABELS
 from ml_models.preprocessing import clean_text_for_bert, yolo_to_vector_for_bert
@@ -93,7 +94,7 @@ def get_bert_model_and_tokenizer():
     return _bert_model, _bert_tokenizer
 
 
-def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, float]:
+def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, Any] | tuple[None, float]:
     logger.info("Классификация креатива...")
     try:
         logger.info("Начало классификации креатива.")

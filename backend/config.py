@@ -83,7 +83,7 @@ TOPIC_FILE_MAPPING = {
 NUM_LABELS = len(TOPICS)
 
 # Маппинг из COCO классов в темы проекта
-def map_coco_to_topic(coco_class: str) -> str:
+def map_coco_to_topic(coco_class: str) -> str | None:
     """Маппинг класса COCO в тему проекта."""
     if coco_class in ['handbag', 'backpack', 'suitcase', 'truck']:
         return 'Сумки'

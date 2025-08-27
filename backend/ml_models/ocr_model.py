@@ -69,7 +69,6 @@ def extract_text_and_blocks(image_path: str, creative) -> tuple[str, list]:
             })
             
         full_text = " ".join(full_text_parts)
-        ic("Текст из EasyOCR:", full_text)
         return full_text, ocr_blocks
 
     except Exception as e:

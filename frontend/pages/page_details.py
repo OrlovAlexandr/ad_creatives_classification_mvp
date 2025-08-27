@@ -1,14 +1,17 @@
-import streamlit as st
-import pandas as pd
-
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-
-from components.visualizer import draw_bounding_boxes
-from components.color_block import color_block_horizontal
-from config import TOPIC_TRANSLATIONS, MINIO_BUCKET, MINIO_PUBLIC_URL, MINIO_ENDPOINT
-from services.fetchers import fetch_creatives_by_group, fetch_creative_details, fetch_groups
-from utils.helpers import is_image_available
 import logging
+
+import pandas as pd
+import streamlit as st
+from components.color_block import color_block_horizontal
+from components.visualizer import draw_bounding_boxes
+from config import MINIO_ENDPOINT
+from config import MINIO_PUBLIC_URL
+from config import TOPIC_TRANSLATIONS
+from services.fetchers import fetch_creative_details
+from services.fetchers import fetch_creatives_by_group
+from services.fetchers import fetch_groups
+from utils.helpers import is_image_available
+
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +37,7 @@ def page_details():
         options=group_ids,
         format_func=lambda gid: group_display_map[gid],
         index=default_index,
-        key="selected_group_analytics"
+        key="selected_group_analytics",
     )
 
     if not selected_group:
@@ -57,13 +60,13 @@ def page_details():
             "Файл": f"{c['creative_id']}.{c['file_format']}",
             "Размер": f"{c['image_width']}x{c['image_height']}",
             "Время загрузки": c["upload_timestamp"].split(".")[0].replace("T", " "),
-            "Статус": "Готово" if c.get("analysis") else "В обработке"
+            "Статус": "Готово" if c.get("analysis") else "В обработке",
         }
         for c in creatives
     ])
 
-    for index, row in df_display.iterrows():
-        col1, col2, col3, col4, col5, col6 = st.columns([3, 2, 2, 2, 1, 1])
+    for _, row in df_display.iterrows():
+        col1, col2, col3, col4, col5 = st.columns([3, 1, 2, 1, 2])
         with col1:
             st.write(f"**{row['Оригинальное имя']}**")
         with col2:
@@ -121,13 +124,13 @@ def page_details():
                 image_with_boxes = draw_bounding_boxes(
                     image_path_or_url=minio_endpoint_url,
                     ocr_blocks=ocr_blocks,
-                    detected_objects=detected_objects
+                    detected_objects=detected_objects,
                 )
 
                 st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
 
             except Exception as e:
-                logger.error(f"Ошибка при отрисовке: {e}")
+                logger.exception("Ошибка при отрисовке")
                 st.error(f"Ошибка при отрисовке: {e}")
                 st.image(minio_image_url, width=300, caption="Оригинал")
         else:
@@ -135,18 +138,24 @@ def page_details():
             st.warning("Изображение недоступно")
             st.code(minio_image_url)
 
+
         st.write(f"**Файл:** {data['original_filename']}")
         st.write(f"**Размер:** {data['file_size']} байт")
         st.write(f"**Формат:** {data['file_format']}")
-        st.write(f"**Размеры:** {data['image_width']}x{data['image_height']}")
+        st.write(f"**Разрешение:** {data['image_width']}x{data['image_height']}")
         st.write(f"**Дата загрузки:** {data['upload_timestamp'].split('.')[0].replace('T', ' ')}")
 
         orig_topic = data.get('analysis', {}).get('main_topic', '—')
         translated_topic = TOPIC_TRANSLATIONS.get(
-            orig_topic, orig_topic
+            orig_topic, orig_topic,
         ) if orig_topic != '—' else orig_topic
 
         st.write(f"**Основная тема:** {translated_topic}")
+
+        topic_confidence = data.get('analysis', {}).get('topic_confidence', '—')
+        # округлим до 3 знаков
+        topic_confidence = round(topic_confidence, 3) if topic_confidence != '—' else '—'
+        st.write(f"**Уверенность:** {topic_confidence}")
 
         ocr_text = data.get('analysis', {}).get('ocr_text', '—')
         st.subheader("Распознанный текст")
@@ -190,7 +199,7 @@ def page_details():
                     {
                         "hex": info["hex"],
                         "percent": info["percent"],
-                        "class_name": cls
+                        "class_name": cls,
                     }
                     for cls, info in palette_colors.items()
                 ]

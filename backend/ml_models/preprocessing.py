@@ -1,4 +1,6 @@
 import re
+from typing import Any
+
 import numpy as np
 from config import COCO_CLASS_TO_IDX, NUM_COCO, map_coco_to_topic
 from icecream import ic
@@ -8,7 +10,6 @@ def clean_text_for_bert(s: str) -> str:
     s = s.lower()
     s = re.sub(r'[^а-яёa-z0-9\s]', ' ', s)
     s = re.sub(r'\s+', ' ', s).strip()
-    ic("Текст после очистки:", s)
     return s
 
 def yolo_to_vector_for_bert(classes: list, confs: list, num_classes: int = NUM_COCO) -> np.ndarray:
@@ -19,13 +20,11 @@ def yolo_to_vector_for_bert(classes: list, confs: list, num_classes: int = NUM_C
         if cls in COCO_CLASS_TO_IDX:
             idx = COCO_CLASS_TO_IDX[cls]
             vec[idx] = max(vec[idx], float(conf))
-    ic("Вектор YOLO (первые 10):", vec[:10])
     return vec
 
-def yolo_top1_topic_for_bert(classes: list, confs: list) -> str:
+def yolo_top1_topic_for_bert(classes: list, confs: list) -> Any | None:
     if not classes or not confs:
         return None
     max_conf_idx = int(np.argmax(confs))
     top_cls = classes[max_conf_idx]
-    ic("Топ-1 тема YOLO:", top_cls)
     return map_coco_to_topic(top_cls)
