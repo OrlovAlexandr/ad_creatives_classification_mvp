@@ -1,4 +1,4 @@
-FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -25,10 +25,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir \
-    torch==2.7.1+cu118 \
-    torchvision==0.22.1+cu118 \
-    torchaudio==2.7.1+cu118 \
-    --extra-index-url https://download.pytorch.org/whl/cu118 && \
+    torch==2.7.1 \
+    torchvision==0.22.1 \
+    torchaudio==2.7.1 && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
