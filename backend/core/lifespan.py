@@ -1,26 +1,32 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from database import Base, engine
-from minio_client import minio_client, settings
-from sqlalchemy.orm import Session
-from database_models.app_settings import AppSettings
+
+from database import Base
 from database import SessionLocal
+from database import engine
+from database_models.app_settings import AppSettings
+from fastapi import FastAPI
+from minio_client import minio_client
+from minio_client import settings
+from sqlalchemy.orm import Session
+
 
 logger = logging.getLogger(__name__)
-from config import DOMINANT_COLORS_COUNT, SECONDARY_COLORS_COUNT
+from config import DOMINANT_COLORS_COUNT
+from config import SECONDARY_COLORS_COUNT
+
 
 def initialize_default_settings(db: Session):
     default_settings = [
         {
-            "key": "DOMINANT_COLORS_COUNT", 
-            "value": str(DOMINANT_COLORS_COUNT), 
-            "description": "Количество доминирующих цветов"
+            "key": "DOMINANT_COLORS_COUNT",
+            "value": str(DOMINANT_COLORS_COUNT),
+            "description": "Количество доминирующих цветов",
             },
         {
-            "key": "SECONDARY_COLORS_COUNT", 
-            "value": str(SECONDARY_COLORS_COUNT), 
-            "description": "Количество второстепенных цветов"
+            "key": "SECONDARY_COLORS_COUNT",
+            "value": str(SECONDARY_COLORS_COUNT),
+            "description": "Количество второстепенных цветов",
             },
     ]
 
@@ -36,13 +42,13 @@ async def lifespan(app: FastAPI):
     logger.info("Запуск lifespan: создание таблиц БД и инициализация настроек...")
     Base.metadata.create_all(bind=engine)
     logger.info("Таблицы БД созданы (если не существовали).")
-    
+
     db = SessionLocal()
     try:
         initialize_default_settings(db)
     finally:
         db.close()
-        
+
     bucket = settings.MINIO_BUCKET
     if not minio_client.bucket_exists(bucket):
         logger.info(f"Создание бакета MinIO: {bucket}")

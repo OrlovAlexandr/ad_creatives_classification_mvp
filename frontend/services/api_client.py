@@ -1,5 +1,7 @@
-import requests
 import logging
+
+import requests
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,6 @@ def make_request(method, endpoint, **kwargs):
         response = requests.request(method, url, **kwargs)
         response.raise_for_status()
         return response.json()
-    except Exception as e:
-        logger.error(f"Ошибка запроса к {url}: {e}")
+    except requests.RequestException:
+        logger.exception(f"Ошибка запроса к {url}")
         return None

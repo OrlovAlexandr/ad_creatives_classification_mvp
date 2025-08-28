@@ -1,10 +1,13 @@
-from datetime import datetime
 import uuid
+from datetime import datetime
+
 import requests
 
 
+HTTP_OK = 200
+
 def generate_group_id():
-    now = datetime.now()
+    now = datetime.utcnow()
     return f"grp_{now.strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:6]}"
 
 
@@ -31,6 +34,7 @@ def calculate_columns(thumb_width: int, estimated_width: int, min_cols: int, max
 def is_image_available(url):
     try:
         response = requests.head(url, timeout=5)
-        return response.status_code == 200
-    except:
+    except requests.RequestException:
         return False
+    else:
+        return response.status_code == HTTP_OK

@@ -11,7 +11,7 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
     n_cols = max(1, min(len(sorted_colors), 10))
     cols = st.columns(n_cols, gap="medium")
 
-    for c, col in zip(sorted_colors, cols):
+    for c, col in zip(sorted_colors, cols, strict=False):
         with col:
             st.markdown(
                 f"""
@@ -23,7 +23,7 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
                     border-radius: 8px;
                 "></div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
             label_parts = [f"<b>{c['hex'].upper()}</b>"]
             if 'class_name' in c:
@@ -36,5 +36,5 @@ def color_block_horizontal(colors, title="Цвета", show_percent=True, show_r
             label_html = "<br>".join(label_parts)
             st.markdown(
                 f"<div style='text-align: left; font-size: 13px; line-height: 1.3;'>{label_html}</div>",
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )

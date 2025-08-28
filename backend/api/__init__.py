@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
-from .groups import router as groups_router
-from .upload import router as upload_router
-from .creatives import router as creatives_router
-from .status import router as status_router
 from .analytics import router as analytics_router
+from .creatives import router as creatives_router
+from .groups import router as groups_router
 from .settings import router as settings_router
+from .status import router as status_router
+from .upload import router as upload_router
+
 
 router = APIRouter()
 

@@ -1,11 +1,12 @@
 import plotly.graph_objects as go
-from config import TOPIC_TRANSLATIONS, COLOR_VISUAL_CLASSES
+from config import COLOR_VISUAL_CLASSES
+from config import TOPIC_TRANSLATIONS
 
 
 def create_topic_color_stacked_bar(topic_color_data, title="Цвета по тематикам"):
     if not topic_color_data:
         fig = go.Figure()
-        fig.add_annotation(text="Нет данных", x=0.5, y=0.5, showarrow=False, font=dict(color="gray"))
+        fig.add_annotation(text="Нет данных", x=0.5, y=0.5, showarrow=False, font={"color": "gray"})
         fig.update_layout(title=title, showlegend=False)
         return fig
 
@@ -15,7 +16,7 @@ def create_topic_color_stacked_bar(topic_color_data, title="Цвета по те
 
     fig = go.Figure()
 
-    
+
     added_to_legend = set()
 
     for topic_orig in reversed(topics_original):
@@ -31,16 +32,16 @@ def create_topic_color_stacked_bar(topic_color_data, title="Цвета по те
                 y=[topic_translated],
                 x=[percent],
                 orientation='h',
-                marker=dict(
-                    color=hex_color,
-                    line=dict(color="#AAAAAA", width=0.1)
-                ),
+                marker={
+                    "color": hex_color,
+                    "line": {"color": "#AAAAAA", "width": 0.1},
+                },
                 text=f"{percent:.1f}%",
-                textposition="inside",   
+                textposition="inside",
                 name=class_name,
                 legendgroup=class_name,
                 showlegend=(class_name not in added_to_legend),
-                hovertemplate=f"<b>{topic_translated}</b><br>{class_name}: {percent:.1f}%<extra></extra>"
+                hovertemplate=f"<b>{topic_translated}</b><br>{class_name}: {percent:.1f}%<extra></extra>",
             ))
             added_to_legend.add(class_name)
             current_x += percent
@@ -51,20 +52,20 @@ def create_topic_color_stacked_bar(topic_color_data, title="Цвета по те
         yaxis={
             'categoryorder': 'array',
             'categoryarray': topics_translated[::-1],
-            'tickfont': dict(size=12),
-            'title': None
+            'tickfont': {"size": 12},
+            'title': None,
         },
         xaxis={
             'title': 'Доля цвета в тематике (%)',
             'range': [0, 100],
             'showgrid': True,
-            'gridcolor': 'lightgray'
+            'gridcolor': 'lightgray',
         },
         height=200 + num_topics * 40,
-        margin=dict(l=150, r=50, t=80, b=50),
+        margin={"l": 150, "r": 50, "t": 80, "b": 50},
         legend_title="Цвета",
         showlegend=True,
-        font=dict(size=12),
+        font={"size": 12},
     )
 
     return fig
@@ -76,7 +77,7 @@ def create_color_pie_chart(class_distribution, title="Распределение
             text="Нет данных",
             xref="paper", yref="paper",
             x=0.5, y=0.5, showarrow=False,
-            font=dict(size=14, color="gray")
+            font={"size": 14, "color": "gray"},
         )
         fig.update_layout(title=title, showlegend=False)
         return fig
@@ -94,17 +95,17 @@ def create_color_pie_chart(class_distribution, title="Распределение
     fig = go.Figure(data=[go.Pie(
         labels=labels,
         values=values,
-        marker=dict(colors=colors),
+        marker={"colors": colors},
         textinfo='label+percent',
         texttemplate="%{label}: %{percent:.1%}",
-        hovertemplate="<b>%{label}</b><br>Доля: %{percent:.1%}<extra></extra>"
+        hovertemplate="<b>%{label}</b><br>Доля: %{percent:.1%}<extra></extra>",
     )])
 
     fig.update_layout(
         title=title,
         showlegend=False,
-        margin=dict(t=50, b=20, l=20, r=20),
-        height=500
+        margin={"t": 50, "b": 20, "l": 20, "r": 20},
+        height=500,
     )
 
     return fig

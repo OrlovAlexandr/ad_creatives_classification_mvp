@@ -1,6 +1,14 @@
-from sqlalchemy import Column, String, Integer, DateTime, JSON, Float, ForeignKey, Text
 from datetime import datetime
+
 from database import Base
+from sqlalchemy import JSON
+from sqlalchemy import Column
+from sqlalchemy import DateTime
+from sqlalchemy import Float
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy import Text
 
 
 class Creative(Base):
@@ -10,7 +18,7 @@ class Creative(Base):
     group_id = Column(String, index=True)
     original_filename = Column(String)
     file_path = Column(String)
-    upload_timestamp = Column(DateTime, default=datetime.utcnow)
+    upload_timestamp = Column(DateTime, default=datetime.utcnow())
     file_size = Column(Integer)
     file_format = Column(String)
     image_width = Column(Integer)

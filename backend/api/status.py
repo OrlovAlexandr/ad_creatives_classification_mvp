@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from database_models.creative import Creative, CreativeAnalysis
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -52,7 +52,7 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
         if status == "SUCCESS" and duration is not None:
             return f"{duration:.1f} sec"  # Без пробела SUCCESS (нужно для подкрашивания ячеек)
         elif status == "PROCESSING" and started:
-            elapsed = (datetime.utcnow() - started).total_seconds()
+            elapsed = (datetime.utcnow() - started).total_seconds()  # noqa: UP017
             return f"{elapsed:.1f} sec "  # С пробелом PROCESSING
         elif status == "ERROR":
             return "X"
@@ -85,7 +85,7 @@ def get_status(creative_id: str, db: Session = Depends(get_db)):
             total_time_str = f"{analysis.total_duration:.1f} sec"
         elif analysis.overall_status == "PROCESSING":
             if analysis.ocr_started_at:
-                elapsed = (datetime.utcnow() - analysis.ocr_started_at).total_seconds()
+                elapsed = (datetime.utcnow() - analysis.ocr_started_at).total_seconds()  # noqa: UP017
                 total_time_str = f"{elapsed:.1f} sec "
         elif analysis.overall_status == "ERROR":
             total_time_str = "X"

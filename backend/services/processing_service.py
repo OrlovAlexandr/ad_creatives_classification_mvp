@@ -2,7 +2,7 @@ from PIL import Image
 from database_models.creative import Creative, CreativeAnalysis
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from ml_models import ocr_model, yolo_detector, classifier
 from sqlalchemy.orm import Session
 from database import SessionLocal
@@ -46,7 +46,7 @@ def perform_ocr(creative_id: str, creative: Creative, analysis: CreativeAnalysis
     """Выполняет OCR."""
     logger.info(f"[{creative_id}] Начало OCR...")
     analysis.ocr_status = "PROCESSING"
-    analysis.ocr_started_at = datetime.utcnow()
+    analysis.ocr_started_at = datetime.utcnow()  # noqa: UP017
     db.commit()
 
     try:
@@ -55,7 +55,7 @@ def perform_ocr(creative_id: str, creative: Creative, analysis: CreativeAnalysis
         analysis.ocr_text = ocr_text
         analysis.ocr_blocks = ocr_blocks
         analysis.ocr_status = "SUCCESS"
-        analysis.ocr_completed_at = datetime.utcnow()
+        analysis.ocr_completed_at = datetime.utcnow()  # noqa: UP017
         analysis.ocr_duration = (analysis.ocr_completed_at - analysis.ocr_started_at).total_seconds()
         db.commit()
         logger.info(f"[{creative_id}] OCR завершен успешно.")
@@ -69,7 +69,7 @@ def perform_detection(creative_id: str, creative: Creative, analysis: CreativeAn
     """Выполняет детекцию объектов."""
     logger.info(f"[{creative_id}] Начало детекции...")
     analysis.detection_status = "PROCESSING"
-    analysis.detection_started_at = datetime.utcnow()
+    analysis.detection_started_at = datetime.utcnow()  # noqa: UP017
     db.commit()
 
     try:
@@ -77,7 +77,7 @@ def perform_detection(creative_id: str, creative: Creative, analysis: CreativeAn
         
         analysis.detected_objects = detected_objects
         analysis.detection_status = "SUCCESS"
-        analysis.detection_completed_at = datetime.utcnow()
+        analysis.detection_completed_at = datetime.utcnow()  # noqa: UP017
         analysis.detection_duration = (analysis.detection_completed_at - analysis.detection_started_at).total_seconds()
         db.commit()
         logger.info(f"[{creative_id}] Детекция завершена успешно.")
@@ -92,7 +92,7 @@ def perform_classification(creative_id: str, analysis: CreativeAnalysis, db: Ses
     """Выполняет классификацию темы."""
     logger.info(f"[{creative_id}] Начало классификации...")
     analysis.classification_status = "PROCESSING"
-    analysis.classification_started_at = datetime.utcnow()
+    analysis.classification_started_at = datetime.utcnow()  # noqa: UP017
     db.commit()
 
     try:
@@ -109,7 +109,7 @@ def perform_classification(creative_id: str, analysis: CreativeAnalysis, db: Ses
             analysis.classification_status = "ERROR"
             analysis.error_message = "Classification returned None"
             
-        analysis.classification_completed_at = datetime.utcnow()
+        analysis.classification_completed_at = datetime.utcnow()  # noqa: UP017
         analysis.classification_duration = (analysis.classification_completed_at - analysis.classification_started_at).total_seconds()
         db.commit()
         logger.info(f"[{creative_id}] Классификация завершена. Тема: {main_topic}, Уверенность: {topic_confidence:.4f}")
@@ -135,7 +135,7 @@ def perform_color_analysis(
 
     logger.info(f"[{creative_id}] Начало анализа цветов...")
     analysis.color_analysis_status = "PROCESSING"
-    analysis.color_analysis_started_at = datetime.utcnow()
+    analysis.color_analysis_started_at = datetime.utcnow()  # noqa: UP017
     db.commit()
 
     try:
@@ -152,7 +152,7 @@ def perform_color_analysis(
         analysis.color_analysis_status = "ERROR"
         raise
     finally:
-        analysis.color_analysis_completed_at = datetime.utcnow()
+        analysis.color_analysis_completed_at = datetime.utcnow()  # noqa: UP017
         if analysis.color_analysis_started_at:
             analysis.color_analysis_duration = (
                 analysis.color_analysis_completed_at - analysis.color_analysis_started_at

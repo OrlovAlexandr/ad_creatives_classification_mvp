@@ -1,6 +1,7 @@
-import os
+import logging  # noqa: INP001
+
 from pydantic_settings import BaseSettings
-import logging
+
 
 logger = logging.getLogger("config")
 
@@ -42,7 +43,7 @@ TOPIC_TRANSLATIONS = {
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Кружки',
-    'clocks': 'Часы'
+    'clocks': 'Часы',
 }
 
 TOPIC_TEXTS = {
@@ -50,7 +51,7 @@ TOPIC_TEXTS = {
     'ties': 'ШЕЛКОВЫЙ ГАЛСТУК. КЛАССИКА. ПОДАРОК МУЖЧИНЕ',
     'bags': 'ЛЕДИ-СУМКА 2025. КОЖА, ЗАСТЕЖКА, ВМЕСТИТЕЛЬНО',
     'cups': 'ФИРМЕННАЯ КЕРАМИКА. ПОДАРОК К ПРАЗДНИКУ. НЕ ТЕРЯЕТ ЦВЕТ',
-    'clocks': 'SMART WATCH 8 СЕРИИ. ДОПУСК УВЕДОМЛЕНИЙ. МОЩНАЯ БАТАРЕЯ'
+    'clocks': 'SMART WATCH 8 СЕРИИ. ДОПУСК УВЕДОМЛЕНИЙ. МОЩНАЯ БАТАРЕЯ',
 }
 
 COCO_CLASSES = [
@@ -63,7 +64,7 @@ COCO_CLASSES = [
     "orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch",
     "potted plant","bed","dining table","toilet","tv","laptop","mouse","remote",
     "keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book",
-    "clock","vase","scissors","teddy bear","hair drier","toothbrush"
+    "clock","vase","scissors","teddy bear","hair drier","toothbrush",
 ]
 
 NUM_COCO = len(COCO_CLASSES)
@@ -77,7 +78,7 @@ TOPIC_FILE_MAPPING = {
     'cutlery': 'Столовые_приборы',
     'clock': 'Часы',
     'cup': 'Кружки',
-    'tie': 'Галстуки'
+    'tie': 'Галстуки',
 }
 
 NUM_LABELS = len(TOPICS)
@@ -120,7 +121,7 @@ PALETTE_HEX = [
     "404040",
     "808080",
     "bfbfbf",
-    "ffffff" 
+    "ffffff",
 ]
 
 MONOCHROME_HEX_SET = {"000000", "404040", "808080", "bfbfbf", "ffffff"}
@@ -131,7 +132,8 @@ COLOR_CLASSES = {
     "Розовый": {"ff80ff", "ff0080", "ff80bf"},
     "Оранжевый": {"ff8000", "ffbf80"},
     "Желтый": {"ffff00", "ffff80", "808040", "808000"},
-    "Зеленый": {"80ff00", "bfff80", "408000", "608040", "00ff00", "80ff80", "008000", "408040", "00ff80", "80ffbf", "008040", "408060"},
+    "Зеленый": {"80ff00", "bfff80", "408000", "608040", "00ff00", "80ff80",
+                "008000", "408040", "00ff80", "80ffbf", "008040", "408060"},
     "Голубой": {"00ffff", "80ffff", "80bfff"},
     "Темно-голубой": {"008080", "408080"},
     "Синий": {"0080ff", "004080", "406080", "0000ff", "000080"},
@@ -142,7 +144,7 @@ COLOR_CLASSES = {
     "Темно-серый": {"404040"},
     "Серый": {"808080"},
     "Светло-серый": {"bfbfbf"},
-    "Белый": {"ffffff"}
+    "Белый": {"ffffff"},
 }
 
 COLOR_VISUAL_CLASSES = {
@@ -162,5 +164,5 @@ COLOR_VISUAL_CLASSES = {
     "Темно-серый": {"404040"},
     "Серый": {"808080"},
     "Светло-серый": {"bfbfbf"},
-    "Белый": {"f7f7f7"}
+    "Белый": {"f7f7f7"},
 }

@@ -40,7 +40,7 @@
 ---
 
 # Запуск
-```
+``` sh
 git clone https://github.com/OrlovAlexandr/ad_creatives_classification_mvp.git
 cd ad_creatives_classification_mvp
 cp .env.example .env
@@ -51,6 +51,7 @@ docker-compose up --build
 ---
 
 ## Структура проекта
+```
 ad_creatives_classification/
 ├── backend/                     # FastAPI + ML
 │   ├── main.py                  # Точка входа
@@ -86,7 +87,7 @@ ad_creatives_classification/
 ├── docker-compose.yml           # Оркестрация сервисов
 ├── .env.example                 # Пример переменных окружения
 └── README.md
-
+```
 ---
 ## Используемые технологии и архитектура  
 
@@ -115,7 +116,7 @@ ad_creatives_classification/
 - таблицы уверенности и времени обработки  
 
 Архитектура системы:  
-Streamlit(ui) <-> FastAPI -> PostgreSQL -> MinIO <-> Redis (Celery)
+`Streamlit(ui) <-> FastAPI -> PostgreSQL -> MinIO <-> Redis (Celery)`
 
 
 Как работает система:  

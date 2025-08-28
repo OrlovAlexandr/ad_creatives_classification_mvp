@@ -2,7 +2,7 @@ from celery import Celery
 from celery.signals import worker_ready
 from database import SessionLocal
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from config import settings
 from utils.minio_utils import download_file_from_minio
 from services.processing_service import (
@@ -101,7 +101,7 @@ def process_creative(self, creative_id: str):
         
         # Завершение
         analysis.overall_status = "SUCCESS"
-        analysis.analysis_timestamp = datetime.utcnow()
+        analysis.analysis_timestamp = datetime.utcnow()  # noqa: UP017
         analysis.total_duration = (
             analysis.analysis_timestamp - analysis.ocr_started_at
         ).total_seconds()
