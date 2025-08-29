@@ -1,6 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
 
+from config import DOMINANT_COLORS_COUNT
+from config import SECONDARY_COLORS_COUNT
 from database import Base
 from database import SessionLocal
 from database import engine
@@ -12,8 +14,6 @@ from sqlalchemy.orm import Session
 
 
 logger = logging.getLogger(__name__)
-from config import DOMINANT_COLORS_COUNT
-from config import SECONDARY_COLORS_COUNT
 
 
 def initialize_default_settings(db: Session):
@@ -22,12 +22,12 @@ def initialize_default_settings(db: Session):
             "key": "DOMINANT_COLORS_COUNT",
             "value": str(DOMINANT_COLORS_COUNT),
             "description": "Количество доминирующих цветов",
-            },
+        },
         {
             "key": "SECONDARY_COLORS_COUNT",
             "value": str(SECONDARY_COLORS_COUNT),
             "description": "Количество второстепенных цветов",
-            },
+        },
     ]
 
     for setting_data in default_settings:
@@ -37,8 +37,9 @@ def initialize_default_settings(db: Session):
             db.add(AppSettings(**setting_data))
     db.commit()
 
+
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI):  # noqa: ARG001
     logger.info("Запуск lifespan: создание таблиц БД и инициализация настроек...")
     Base.metadata.create_all(bind=engine)
     logger.info("Таблицы БД созданы (если не существовали).")

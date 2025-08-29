@@ -1,5 +1,6 @@
+from typing import Any
+
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 
 
 class UploadRequest(BaseModel):
@@ -10,40 +11,41 @@ class UploadRequest(BaseModel):
 class UploadResponse(BaseModel):
     uploaded: int
     group_id: str
-    errors: List[str] = []
+    errors: list[str] = []
 
 
 class AnalyticsResponse(BaseModel):
-    summary: Dict[str, Any]
-    topics: List[Dict[str, Any]]
-    dominant_colors: List[Dict[str, Any]]
-    durations: Optional[Dict[str, float]] = None
-    topics_table: Optional[List[Dict[str, Any]]] = None
-    total_processing_time: Optional[float] = None
-    total_creatives_in_group: Optional[int]
-    color_class_distribution: Optional[Dict[str, float]] = None
-    topic_color_distribution: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    summary: dict[str, Any]
+    topics: list[dict[str, Any]]
+    dominant_colors: list[dict[str, Any]]
+    durations: dict[str, float] | None = None
+    topics_table: list[dict[str, Any]] | None = None
+    total_processing_time: float | None = None
+    total_creatives_in_group: int | None
+    color_class_distribution: dict[str, float] | None = None
+    topic_color_distribution: dict[str, list[dict[str, Any]]] | None = None
 
 
 class AnalysisBase(BaseModel):
-    dominant_colors: Optional[List[Dict]] = None
-    secondary_colors: Optional[List[Dict]] = None
-    palette_colors: Optional[Dict] = None
+    dominant_colors: list[dict] | None = None
+    secondary_colors: list[dict] | None = None
+    palette_colors: dict | None = None
 
-    ocr_status: Optional[str] = None
-    detection_status: Optional[str] = None
-    classification_status: Optional[str] = None
-    color_analysis_status: Optional[str] = None
-    ocr_duration: Optional[float] = None
-    detection_duration: Optional[float] = None
-    classification_duration: Optional[float] = None
-    color_analysis_duration: Optional[float] = None
-    
-    ocr_text: Optional[str] = None
-    ocr_blocks: Optional[List[Dict]] = None
-    detected_objects: Optional[List[Dict]] = None
-    main_topic: Optional[str] = None
-    topic_confidence: Optional[float] = None
+    ocr_status: str | None = None
+    detection_status: str | None = None
+    classification_status: str | None = None
+    color_analysis_status: str | None = None
+    ocr_duration: float | None = None
+    detection_duration: float | None = None
+    classification_duration: float | None = None
+    color_analysis_duration: float | None = None
+
+    ocr_text: str | None = None
+    ocr_blocks: list[dict] | None = None
+    detected_objects: list[dict] | None = None
+    main_topic: str | None = None
+    topic_confidence: float | None = None
+
     class Config:
         from_attributes = True
 
@@ -64,7 +66,7 @@ class CreativeBase(BaseModel):
 
 
 class CreativeDetail(CreativeBase):
-    analysis: Optional[AnalysisBase] = None
+    analysis: AnalysisBase | None = None
 
     class Config:
         from_attributes = True

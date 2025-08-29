@@ -51,7 +51,7 @@ def page_analytics():
         st.subheader("Сводка")
         st.markdown(
             '<div style="font-size: 17px; font-weight: bold;">По группе</div>', unsafe_allow_html=True,
-            )
+        )
         a1, a2 = st.columns(2)
         a1.metric("Креативов", data_group["summary"]["total_creatives"])
         c1, c2, c3 = st.columns(3)
@@ -94,7 +94,7 @@ def page_analytics():
         st.subheader(" ")
         st.markdown(
             '<div style="font-size: 17px; font-weight: bold;">По всем креативам</div>', unsafe_allow_html=True,
-            )
+        )
         if data_all:
             a1, a2 = st.columns(2)
             a1.metric("Групп", len(fetch_groups()))
@@ -150,7 +150,6 @@ def page_analytics():
             st.markdown(f"**Среднее время на обработку одного креатива:** `{format_seconds_short(avg_per_creative)}`")
     else:
         st.info("Нет данных для таблицы по группе.")
-
 
     st.subheader("Ааналитика общая")
     if data_all and "topics_table" in data_all and data_all["topics_table"]:

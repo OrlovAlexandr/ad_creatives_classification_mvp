@@ -1,5 +1,5 @@
 import logging
-import os
+from pathlib import Path
 
 from config import settings
 from minio.error import S3Error
@@ -7,6 +7,15 @@ from minio_client import minio_client
 
 
 logger = logging.getLogger(__name__)
+
+
+class FileNotSavedException(Exception):
+    message = "Файл не был сохранён локально"
+
+
+def _raise_file_not_saved_exception(temp_local_path: str) -> None:
+    raise FileNotSavedException(temp_local_path)
+
 
 def upload_to_minio(file_path: str, object_name: str) -> str:
     try:
@@ -28,30 +37,34 @@ def upload_to_minio(file_path: str, object_name: str) -> str:
 def download_file_from_minio(creative, analysis, db, temp_local_path: str):
     """Скачивает файл креатива из MinIO."""
     try:
+        temp_local_path = Path(temp_local_path)
         object_name = f"{creative.creative_id}.{creative.file_format}"
 
-        os.makedirs(os.path.dirname(temp_local_path), exist_ok=True)
+        temp_local_path.parent.mkdir(parents=True, exist_ok=True)
         response = minio_client.get_object(settings.MINIO_BUCKET, object_name)
-        with open(temp_local_path, "wb") as f:
+        with temp_local_path.open("wb") as f:
             f.write(response.read())
-        if not os.path.exists(temp_local_path):
-            raise Exception("Файл не был сохранён локально")
+        if not temp_local_path.exists():
+            _raise_file_not_saved_exception(str(temp_local_path))
         logger.info(f"Изображение {creative.creative_id} успешно загружено из MinIO")
-        return True
     except S3Error:
         logger.exception(f"Ошибка MinIO при загрузке {creative.creative_id}")
         analysis.overall_status = "ERROR"
         analysis.error_message = "Не удалось загрузить изображение из MinIO"
         db.commit()
-    except Exception:
-        logger.exception(f"Ошибка загрузки изображения из MinIO для {creative.creative_id}")
+    except Exception as e:
+        logger.exception(
+            f"Ошибка загрузки изображения из MinIO для {creative.creative_id}: {type(e).__name__}",
+        )
         analysis.overall_status = "ERROR"
         analysis.error_message = "Не удалось загрузить изображение из MinIO"
         db.commit()
+    else:
+        return True
 
-    if os.path.exists(temp_local_path):
+    if temp_local_path.exists():
         try:
-            os.remove(temp_local_path)
+            temp_local_path.unlink()
             logger.info(f"Удален повреждённый временный файл {temp_local_path}")
         except Exception:
             logger.exception(f"Ошибка при удалении временного файла {temp_local_path}")

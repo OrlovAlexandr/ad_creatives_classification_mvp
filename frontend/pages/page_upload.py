@@ -1,26 +1,35 @@
-import streamlit as st
-import uuid
-import requests
 import time
-import pandas as pd
+import uuid
+from http import HTTPStatus
 
-from config import TOPIC_TRANSLATIONS, BACKEND_URL
-from utils.helpers import generate_group_id, generate_creative_id
+import pandas as pd
+import requests
+import streamlit as st
+from components.styles import style_status
+from components.styles import style_topic
 from components.thumbnails import display_uploaded_thumbnails
-from components.styles import style_status, style_topic
-from services.fetchers import upload_files, fetch_groups
+from config import BACKEND_URL
+from config import TOPIC_TRANSLATIONS
+from services.fetchers import fetch_groups
+from services.fetchers import upload_files
+from utils.helpers import generate_creative_id
+from utils.helpers import generate_group_id
+
+
+HTTP_OK = HTTPStatus.OK
+
 
 def page_upload():
     st.header("Загрузка креативов")
 
     if "current_group_id" not in st.session_state:
         st.session_state.current_group_id = generate_group_id()
-    
+
     st.text(f"Текущая группа: {st.session_state.current_group_id}")
 
     if "selected_files" not in st.session_state:
         st.session_state.selected_files = []
-    
+
     if "uploader_key" not in st.session_state:
         st.session_state.uploader_key = str(uuid.uuid4())
 
@@ -29,7 +38,7 @@ def page_upload():
         type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
         key=st.session_state.uploader_key,
-        help="Поддерживаемые форматы: JPG, PNG, WebP. Можете выбрать несколько файлов."
+        help="Поддерживаемые форматы: JPG, PNG, WebP. Можете выбрать несколько файлов.",
     )
 
     if new_uploads:
@@ -43,11 +52,11 @@ def page_upload():
                     "name": file.name,
                     "type": file.type,
                     "size": file.size,
-                    "file_obj": file
+                    "file_obj": file,
                 })
                 existing_names.add(file.name)
                 added_any = True
-        
+
         if added_any:
             st.session_state.uploader_key = str(uuid.uuid4())
             st.rerun()
@@ -63,7 +72,7 @@ def page_upload():
 
             for file_info in st.session_state.selected_files:
                 file_obj = file_info["file_obj"]
-                file_obj.seek(0) 
+                file_obj.seek(0)
                 files_for_upload.append(file_obj)
                 creative_ids.append(generate_creative_id())
                 original_filenames.append(file_info["name"])
@@ -71,10 +80,10 @@ def page_upload():
             result = upload_files(files_for_upload, st.session_state.current_group_id, creative_ids, original_filenames)
             if result:
                 st.success(
-                    f"Успешно загружено {result['uploaded']} файлов в группу {st.session_state.current_group_id}"
+                    f"Успешно загружено {result['uploaded']} файлов в группу {st.session_state.current_group_id}",
                 )
                 st.session_state.uploaded_creatives = creative_ids
-                st.session_state.selected_files = [] 
+                st.session_state.selected_files = []
                 st.session_state.uploader_key = str(uuid.uuid4())
                 st.session_state.pop("current_group_id", None)
                 fetch_groups.clear()
@@ -103,20 +112,20 @@ def page_upload():
         status_table = st.empty()
         while True:
             statuses = []
-            finished_count = 0 
+            finished_count = 0
             total_count = len(st.session_state.uploaded_creatives)
-            
+
             for cid in st.session_state.uploaded_creatives:
                 try:
-                    resp = requests.get(f"{BACKEND_URL}/status/{cid}")
-                    if resp.status_code == 200:
+                    resp = requests.get(f"{BACKEND_URL}/status/{cid}", timeout=10)
+                    if resp.status_code == HTTP_OK:
                         data = resp.json()
 
                         original_topic = data["main_topic"]
                         translated_topic = TOPIC_TRANSLATIONS.get(
-                            original_topic, original_topic
-                            ) if original_topic else "—"
-                        
+                            original_topic, original_topic,
+                        ) if original_topic else "—"
+
                         stage_statuses = [
                             data["ocr_status"],
                             data["detection_status"],
@@ -125,7 +134,7 @@ def page_upload():
                         ]
 
                         is_finished = all(
-                            isinstance(s, str) and s.endswith("sec") and not s.endswith("sec ") 
+                            isinstance(s, str) and s.endswith("sec") and not s.endswith("sec ")
                             for s in stage_statuses if s != "X"
                         )
                         statuses.append({
@@ -140,7 +149,7 @@ def page_upload():
                             "Цвет": data["color_status"],
                             "Топик": translated_topic or "PENDING",
                             "Confidence": f"{data['topic_confidence']:.2f}" if data["topic_confidence"] else "—",
-                            "Статус": data.get("overall_status", "—")
+                            "Статус": data.get("overall_status", "—"),
                         })
                         if is_finished:
                             finished_count += 1
@@ -148,17 +157,19 @@ def page_upload():
                         statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Статус {resp.status_code}"})
                 except requests.exceptions.RequestException as e:
                     statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Сеть: {type(e).__name__}"})
-                except Exception as e:
-                    statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Ошибка: {type(e).__name__}"})
+                except TypeError as e:
+                    statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Тип: {e}"})
+                except RuntimeError as e:
+                    statuses.append({"ID": cid[:8] + "...", "Ошибка": f"Выполнение: {e}"})
             df = pd.DataFrame(statuses)
             styled_df = df.style.map(style_status, subset=[
-                "OCR", "Детекция", "Классиф.", "Цвет", "Статус"
+                "OCR", "Детекция", "Классиф.", "Цвет", "Статус",
             ]).map(style_topic, subset=["Топик"])
             status_table.dataframe(styled_df, use_container_width=True)
 
             if finished_count == total_count and total_count > 0:
                 st.success("Все креативы обработаны!")
-                st.session_state.uploaded_creatives = [] 
-                return 
-            else:
-                time.sleep(1)
+                st.session_state.uploaded_creatives = []
+                return
+
+            time.sleep(1)
