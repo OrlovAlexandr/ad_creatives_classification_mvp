@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 
 logger = logging.getLogger("config")
 
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     MINIO_ENDPOINT: str
@@ -27,13 +28,12 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
-settings = Settings()
 
+settings = Settings()
 
 logger.info("Загруженные настройки:")
 for key, value in settings.model_dump().items():
     logger.info(f"  {key}: {value}")
-
 
 # Константы для тематик
 TOPICS = ['cutlery', 'ties', 'bags', 'cups', 'clocks']
@@ -55,16 +55,16 @@ TOPIC_TEXTS = {
 }
 
 COCO_CLASSES = [
-    "person","bicycle","car","motorcycle","airplane","bus","train","truck","boat",
-    "traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog",
-    "horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella",
-    "handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite",
-    "baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle",
-    "wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich",
-    "orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch",
-    "potted plant","bed","dining table","toilet","tv","laptop","mouse","remote",
-    "keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book",
-    "clock","vase","scissors","teddy bear","hair drier","toothbrush",
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+    "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog",
+    "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella",
+    "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite",
+    "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle",
+    "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich",
+    "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote",
+    "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book",
+    "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush",
 ]
 
 NUM_COCO = len(COCO_CLASSES)
@@ -83,6 +83,7 @@ TOPIC_FILE_MAPPING = {
 
 NUM_LABELS = len(TOPICS)
 
+
 # Маппинг из COCO классов в темы проекта
 def map_coco_to_topic(coco_class: str) -> str | None:
     """Маппинг класса COCO в тему проекта."""
@@ -97,7 +98,6 @@ def map_coco_to_topic(coco_class: str) -> str | None:
     if coco_class == 'tie':
         return 'Галстуки'
     return None
-
 
 
 # Дефолты для цветового анализа
@@ -166,3 +166,34 @@ COLOR_VISUAL_CLASSES = {
     "Светло-серый": {"bfbfbf"},
     "Белый": {"f7f7f7"},
 }
+
+ML_STAGES = [
+    {
+        "name": "ocr",
+        "status": "ocr_status",
+        "started": "ocr_started_at",
+        "completed": "ocr_completed_at",
+        "duration": "ocr_duration",
+    },
+    {
+        "name": "detection",
+        "status": "detection_status",
+        "started": "detection_started_at",
+        "completed": "detection_completed_at",
+        "duration": "detection_duration",
+    },
+    {
+        "name": "classification",
+        "status": "classification_status",
+        "started": "classification_started_at",
+        "completed": "classification_completed_at",
+        "duration": "classification_duration",
+    },
+    {
+        "name": "color",
+        "status": "color_analysis_status",
+        "started": "color_analysis_started_at",
+        "completed": "color_analysis_completed_at",
+        "duration": "color_analysis_duration",
+    },
+]

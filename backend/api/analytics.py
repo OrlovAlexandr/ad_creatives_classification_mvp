@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+
 @router.get("/group/{group_id}", response_model=AnalyticsResponse)
 def get_analytics(group_id: str, db: Session = Depends(get_db)):
     creatives = db.query(Creative).filter(Creative.group_id == group_id).all()
