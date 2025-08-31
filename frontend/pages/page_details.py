@@ -1,3 +1,4 @@
+# frontend/pages/page_details.py
 import logging
 
 import pandas as pd
@@ -16,40 +17,9 @@ from utils.helpers import is_image_available
 logger = logging.getLogger(__name__)
 
 
-def page_details():
-    st.header("Детали креатива")
-
-    if "selected_creative_id_from_table" not in st.session_state:
-        st.session_state.selected_creative_id_from_table = None
-
-    groups = fetch_groups()
-    if not groups:
-        st.info("Нет доступных групп")
-        return
-
-    group_display_map = {g["group_id"]: g["display_name"] for g in groups}
-    group_ids = list(group_display_map.keys())
-
-    default_index = 0 if group_ids else None  # бэк уже сортирует
-
-    selected_group = st.selectbox(
-        "Выберите группу",
-        options=group_ids,
-        format_func=lambda gid: group_display_map[gid],
-        index=default_index,
-        key="selected_group_analytics",
-    )
-
-    if not selected_group:
-        st.session_state.selected_creative_id_from_table = None
-        return
-
-    with st.spinner("Загрузка креативов..."):
-        creatives = fetch_creatives_by_group(selected_group)
-
+def _display_creatives_list(creatives):
     if not creatives:
         st.info("В этой группе нет креативов.")
-        st.session_state.selected_creative_id_from_table = None
         return
 
     # Табличка с креативами выбранной группы
@@ -80,6 +50,142 @@ def page_details():
                 st.session_state.selected_creative_id_from_table = row['ID']
                 st.rerun()
 
+
+def _display_image_with_boxes(data):
+    minio_image_url = f"{data['file_path']}"
+    minio_endpoint_url = minio_image_url.replace(MINIO_PUBLIC_URL, MINIO_ENDPOINT)
+
+    if is_image_available(minio_endpoint_url):
+        try:
+            ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
+            detected_objects = data.get("analysis", {}).get("detected_objects", [])
+
+            image_with_boxes = draw_bounding_boxes(
+                image_path_or_url=minio_endpoint_url,
+                ocr_blocks=ocr_blocks,
+                detected_objects=detected_objects,
+            )
+
+            st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
+
+        except Exception as e:
+            logger.exception("Ошибка при отрисовке")
+            st.error(f"Ошибка при отрисовке: {e}")
+            st.image(minio_image_url, width=300, caption="Оригинал")
+    else:
+        logger.warning(f"Изображение недоступно: {minio_image_url}")
+        st.warning("Изображение недоступно")
+        st.code(minio_image_url)
+
+
+def _display_basic_info(data):
+    st.write(f"**Файл:** {data['original_filename']}")
+    st.write(f"**Размер:** {data['file_size']} байт")
+    st.write(f"**Формат:** {data['file_format']}")
+    st.write(f"**Разрешение:** {data['image_width']}x{data['image_height']}")
+    st.write(f"**Дата загрузки:** {data['upload_timestamp'].split('.')[0].replace('T', ' ')}")
+
+    orig_topic = data.get('analysis', {}).get('main_topic', '—')
+    translated_topic = TOPIC_TRANSLATIONS.get(
+        orig_topic, orig_topic,
+    ) if orig_topic != '—' else orig_topic
+    st.write(f"**Основная тема:** {translated_topic}")
+
+    topic_confidence = data.get('analysis', {}).get('topic_confidence', '—')
+    topic_confidence = round(topic_confidence, 3) if topic_confidence != '—' else '—'
+    st.write(f"**Уверенность:** {topic_confidence}")
+
+
+def _display_ocr_info(data):
+    ocr_text = data.get('analysis', {}).get('ocr_text', '—')
+    st.subheader("Распознанный текст")
+    st.text_area("OCR", ocr_text, height=150)
+
+    ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
+    if ocr_blocks:
+        for block in ocr_blocks:
+            if 'bbox' in block and isinstance(block['bbox'], list):
+                block['bbox'] = [round(x, 4) for x in block['bbox']]
+
+        st.write("Блоки текста:")
+        st.dataframe(pd.DataFrame(ocr_blocks, columns=['text', 'bbox', 'confidence']))
+    else:
+        st.info("Текст не распознан.")
+
+
+def _display_detection_info(data):
+    detected_objects = data.get('analysis', {}).get('detected_objects', [])
+    if detected_objects:
+        for obj in detected_objects:
+            if 'bbox' in obj and isinstance(obj['bbox'], list):
+                obj['bbox'] = [round(x, 4) for x in obj['bbox']]
+
+        st.subheader("Обнаруженные объекты")
+        st.dataframe(pd.DataFrame(detected_objects, columns=['class', 'bbox', 'confidence']))
+    else:
+        st.info("Объекты не обнаружены.")
+
+
+def _display_color_info(data):
+    dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
+    secondary_colors = data.get('analysis', {}).get('secondary_colors', [])
+    palette_colors = data.get('analysis', {}).get('palette_colors', {})
+
+    if dominant_colors or secondary_colors or palette_colors:
+        st.subheader("Цвета")
+
+        if dominant_colors:
+            color_block_horizontal(dominant_colors, "Доминирующие цвета", show_percent=True, show_rgb=True)
+
+        if secondary_colors:
+            color_block_horizontal(secondary_colors, "Второстепенные цвета", show_percent=True, show_rgb=True)
+
+        if palette_colors:
+            palette_list = [
+                {
+                    "hex": info["hex"],
+                    "percent": info["percent"],
+                    "class_name": cls,
+                }
+                for cls, info in palette_colors.items()
+            ]
+            color_block_horizontal(palette_list, "По палитре", show_percent=True, show_rgb=True)
+    else:
+        st.info("Цвета не определены.")
+
+
+def page_details():
+    st.header("Детали креатива")
+
+    if "selected_creative_id_from_table" not in st.session_state:
+        st.session_state.selected_creative_id_from_table = None
+
+    groups = fetch_groups()
+    if not groups:
+        st.info("Нет доступных групп")
+        return
+
+    group_display_map = {g["group_id"]: g["display_name"] for g in groups}
+    group_ids = list(group_display_map.keys())
+
+    default_index = 0 if group_ids else None
+
+    selected_group = st.selectbox(
+        "Выберите группу",
+        options=group_ids,
+        format_func=lambda gid: group_display_map[gid],
+        index=default_index,
+        key="selected_group_analytics",
+    )
+
+    if not selected_group:
+        st.session_state.selected_creative_id_from_table = None
+        return
+
+    with st.spinner("Загрузка креативов..."):
+        creatives = fetch_creatives_by_group(selected_group)
+
+    _display_creatives_list(creatives)
     st.divider()
 
     selected_creative_id = st.session_state.selected_creative_id_from_table
@@ -114,95 +220,8 @@ def page_details():
         st.divider()
         st.subheader(f"Детали креатива: {selected_creative_id}")
 
-        minio_image_url = f"{data['file_path']}"
-        minio_endpoint_url = minio_image_url.replace(MINIO_PUBLIC_URL, MINIO_ENDPOINT)
-        if is_image_available(minio_endpoint_url):
-            try:
-                ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
-                detected_objects = data.get("analysis", {}).get("detected_objects", [])
-
-                image_with_boxes = draw_bounding_boxes(
-                    image_path_or_url=minio_endpoint_url,
-                    ocr_blocks=ocr_blocks,
-                    detected_objects=detected_objects,
-                )
-
-                st.image(image_with_boxes, width=600, caption="Анализ: OCR (зелёные) и объекты (жёлтые)")
-
-            except Exception as e:
-                logger.exception("Ошибка при отрисовке")
-                st.error(f"Ошибка при отрисовке: {e}")
-                st.image(minio_image_url, width=300, caption="Оригинал")
-        else:
-            logger.warning(f"Изображение недоступно: {minio_image_url}")
-            st.warning("Изображение недоступно")
-            st.code(minio_image_url)
-
-
-        st.write(f"**Файл:** {data['original_filename']}")
-        st.write(f"**Размер:** {data['file_size']} байт")
-        st.write(f"**Формат:** {data['file_format']}")
-        st.write(f"**Разрешение:** {data['image_width']}x{data['image_height']}")
-        st.write(f"**Дата загрузки:** {data['upload_timestamp'].split('.')[0].replace('T', ' ')}")
-
-        orig_topic = data.get('analysis', {}).get('main_topic', '—')
-        translated_topic = TOPIC_TRANSLATIONS.get(
-            orig_topic, orig_topic,
-        ) if orig_topic != '—' else orig_topic
-
-        st.write(f"**Основная тема:** {translated_topic}")
-
-        topic_confidence = data.get('analysis', {}).get('topic_confidence', '—')
-        # округлим до 3 знаков
-        topic_confidence = round(topic_confidence, 3) if topic_confidence != '—' else '—'
-        st.write(f"**Уверенность:** {topic_confidence}")
-
-        ocr_text = data.get('analysis', {}).get('ocr_text', '—')
-        st.subheader("Распознанный текст")
-        st.text_area("OCR", ocr_text, height=150)
-
-        ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
-
-        if ocr_blocks:
-            for block in ocr_blocks:
-                block['bbox'] = [round(x, 4) for x in block['bbox']]
-
-            st.write("Блоки текста:")
-            st.dataframe(pd.DataFrame(ocr_blocks, columns=['text', 'bbox', 'confidence']))
-        else:
-            st.info("Текст не распознан.")
-
-        detected_objects = data.get('analysis', {}).get('detected_objects', [])
-        if detected_objects:
-            for obj in detected_objects:
-                obj['bbox'] = [round(x, 4) for x in obj['bbox']]
-            st.subheader("Обнаруженные объекты")
-            st.dataframe(pd.DataFrame(detected_objects, columns=['class', 'bbox', 'confidence']))
-        else:
-            st.info("Объекты не обнаружены.")
-
-        dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
-        secondary_colors = data.get('analysis', {}).get('secondary_colors', [])
-        palette_colors = data.get('analysis', {}).get('palette_colors', {})
-
-        if dominant_colors or secondary_colors or palette_colors:
-            st.subheader("Цвета")
-
-            if dominant_colors:
-                color_block_horizontal(dominant_colors, "Доминирующие цвета", show_percent=True, show_rgb=True)
-
-            if secondary_colors:
-                color_block_horizontal(secondary_colors, "Второстепенные цвета", show_percent=True, show_rgb=True)
-
-            if palette_colors:
-                palette_list = [
-                    {
-                        "hex": info["hex"],
-                        "percent": info["percent"],
-                        "class_name": cls,
-                    }
-                    for cls, info in palette_colors.items()
-                ]
-                color_block_horizontal(palette_list, "По палитре", show_percent=True, show_rgb=True)
-        else:
-            st.info("Цвета не определены.")
+        _display_image_with_boxes(data)
+        _display_basic_info(data)
+        _display_ocr_info(data)
+        _display_detection_info(data)
+        _display_color_info(data)

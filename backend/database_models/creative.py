@@ -25,7 +25,6 @@ class Creative(Base):
     image_height = Column(Integer)
 
 
-
 class CreativeAnalysis(Base):
     __tablename__ = "creative_analysis"
 

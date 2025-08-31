@@ -1,3 +1,5 @@
+from typing import Any
+
 from config import TOPIC_TRANSLATIONS
 from config import TOPICS
 from database import get_db
@@ -16,6 +18,55 @@ from sqlalchemy.orm import Session
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+def _process_single_analysis(
+        analysis: CreativeAnalysis,
+        topic_stats: dict[str, dict[str, Any]],
+        topics: dict[str, int],
+        colors: dict[str, int],
+):
+    ocr_blocks = getattr(analysis, 'ocr_blocks', None) or []
+    detected_objects = getattr(analysis, 'detected_objects', None) or []
+    main_topic = getattr(analysis, 'main_topic', None)
+    topic_confidence = getattr(analysis, 'topic_confidence', None)
+    dominant_colors = getattr(analysis, 'dominant_colors', None) or []
+
+    if ocr_blocks:
+        try:
+            confs = [b["confidence"] for b in ocr_blocks]
+            if confs:
+                avg_conf = sum(confs) / len(confs)
+                if isinstance(avg_conf, int | float):
+                    topic_stats.setdefault(main_topic, {}).setdefault("ocr_conf", 0.0)
+                    topic_stats[main_topic]["ocr_conf"] += avg_conf
+        except (KeyError, TypeError, ZeroDivisionError):
+            pass
+
+    if detected_objects:
+        try:
+            confs = [o["confidence"] for o in detected_objects]
+            if confs:
+                avg_conf = sum(confs) / len(confs)
+                if isinstance(avg_conf, int | float):
+                    topic_stats.setdefault(main_topic, {}).setdefault("obj_conf", 0.0)
+                    topic_stats[main_topic]["obj_conf"] += avg_conf
+        except (KeyError, TypeError, ZeroDivisionError):
+            pass
+
+    if main_topic:
+        topics[main_topic] = topics.get(main_topic, 0) + 1
+        topic_stats.setdefault(main_topic, {}).setdefault("count", 0)
+        topic_stats[main_topic]["count"] += 1
+
+    if topic_confidence is not None and isinstance(topic_confidence, int | float):
+        topic_stats.setdefault(main_topic, {}).setdefault("topic_conf", 0.0)
+        topic_stats[main_topic]["topic_conf"] += topic_confidence
+
+    for c in dominant_colors:
+        hex_color = c.get("hex")
+        if hex_color:
+            colors[hex_color] = colors.get(hex_color, 0) + 1
+
+
 @router.get("/group/{group_id}", response_model=AnalyticsResponse)
 def get_analytics(group_id: str, db: Session = Depends(get_db)):
     creatives = db.query(Creative).filter(Creative.group_id == group_id).all()
@@ -28,71 +79,46 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):
     ).all()
 
     total_analyses = len(analyses)
-    avg_ocr_conf = 0.0
-    avg_obj_conf = 0.0
-    avg_topic_conf = 0.0
-    topics = {}
-    colors = {}
-    topic_stats = {}
 
-    for topic in TOPICS:
-        topic_stats[topic] = {
-            "count": 0,
-            "ocr_conf": 0.0,
-            "obj_conf": 0.0,
-            "topic_conf": 0.0,
-        }
+    topics: dict[str, int] = {}
+    colors: dict[str, int] = {}
+    topic_stats: dict[str, dict[str, Any]] = {
+        topic: {"count": 0, "ocr_conf": 0.0, "obj_conf": 0.0, "topic_conf": 0.0}
+        for topic in TOPICS
+    }
 
-    for a in analyses:
-        if a.ocr_blocks:
-            confs = [b["confidence"] for b in a.ocr_blocks]
-            avg_ocr_conf += sum(confs) / len(confs)
-            if a.main_topic:
-                topic_stats[a.main_topic]["ocr_conf"] += sum(confs) / len(confs)
+    for analysis in analyses:
+        _process_single_analysis(analysis, topic_stats, topics, colors)
 
-        if a.detected_objects:
-            confs = [o["confidence"] for o in a.detected_objects]
-            avg_obj_conf += sum(confs) / len(confs)
-            if a.main_topic:
-                topic_stats[a.main_topic]["obj_conf"] += sum(confs) / len(confs)
+    total_ocr_confs = sum(stats.get("ocr_conf", 0.0) for stats in topic_stats.values())
+    total_obj_confs = sum(stats.get("obj_conf", 0.0) for stats in topic_stats.values())
+    total_topic_confs = sum(stats.get("topic_conf", 0.0) for stats in topic_stats.values())
 
-        if a.main_topic:
-            topic = a.main_topic
-            topics[topic] = topics.get(topic, 0) + 1
-            topic_stats[topic]["count"] += 1
+    avg_ocr_conf = total_ocr_confs / total_analyses if total_analyses else 0.0
+    avg_obj_conf = total_obj_confs / total_analyses if total_analyses else 0.0
+    avg_topic_conf = total_topic_confs / total_analyses if total_analyses else 0.0
 
-        if a.topic_confidence:
-            topic_stats[a.main_topic]["topic_conf"] += a.topic_confidence
-            avg_topic_conf += a.topic_confidence
-
-        for c in a.dominant_colors or []:
-            hex_color = c.get("hex")
-            if hex_color:
-                colors[hex_color] = colors.get(hex_color, 0) + 1
-
-    avg_ocr_conf = avg_ocr_conf / total_analyses if total_analyses else 0
-    avg_obj_conf = avg_obj_conf / total_analyses if total_analyses else 0
-    avg_topic_conf = avg_topic_conf / total_analyses if total_analyses else 0
-
-    # таблица по тематикам
     topics_table = []
     for topic, stats in topic_stats.items():
-        if stats["count"] == 0:
+        count = stats["count"]
+        if count == 0:
             continue
+        ocr_total = stats.get("ocr_conf", 0.0)
+        obj_total = stats.get("obj_conf", 0.0)
+        topic_total = stats.get("topic_conf", 0.0)
+
         topics_table.append({
             "Тематики": TOPIC_TRANSLATIONS.get(topic, topic),
-            "Кол-во": stats["count"],
-            "Ср. уверенность (OCR)": f"{stats['ocr_conf'] / stats['count']:.2f}" if stats["count"] else "—",
-            "Ср. уверенность (объекты)": f"{stats['obj_conf'] / stats['count']:.2f}" if stats["count"] else "—",
-            "Cр. уверенность (топики)": f"{stats['topic_conf'] / stats['count']:.2f}" if stats["count"] else "—",
+            "Кол-во": count,
+            "Ср. уверенность (OCR)": f"{ocr_total / count:.2f}" if count else "—",
+            "Ср. уверенность (объекты)": f"{obj_total / count:.2f}" if count else "—",
+            "Cр. уверенность (топики)": f"{topic_total / count:.2f}" if count else "—",
         })
 
-    # Общее время обработки группы
     total_processing_time, total_creatives = calculate_group_processing_time(db, group_id)
 
     color_class_dist = get_color_class_distribution(analyses)
     topic_color_distribution = get_topic_color_distribution(analyses, top_n=5)
-
 
     return {
         "summary": {
@@ -110,6 +136,7 @@ def get_analytics(group_id: str, db: Session = Depends(get_db)):
         "topic_color_distribution": topic_color_distribution,
     }
 
+
 @router.get("/all", response_model=AnalyticsResponse)
 def get_analytics_all(db: Session = Depends(get_db)):
     groups = db.query(Creative.group_id).distinct().all()
@@ -124,78 +151,51 @@ def get_analytics_all(db: Session = Depends(get_db)):
         total_processing_time += group_time
         total_creatives_all += group_count
 
-    # Анализ всех креативов
     analyses = db.query(CreativeAnalysis).join(Creative).filter(
         CreativeAnalysis.overall_status == "SUCCESS",
     ).all()
 
     total_analyses = len(analyses)
-    avg_ocr_conf = 0.0
-    avg_obj_conf = 0.0
-    avg_topic_conf = 0.0
-    topics = {}
-    colors = {}
-    topic_stats = {}
 
-    for topic in TOPICS:
-        topic_stats[topic] = {
-            "count": 0,
-            "ocr_conf": 0.0,
-            "obj_conf": 0.0,
-            "topic_conf": 0.0,
-        }
+    topics: dict[str, int] = {}
+    colors: dict[str, int] = {}
+    topic_stats: dict[str, dict[str, Any]] = {
+        topic: {"count": 0, "ocr_conf": 0.0, "obj_conf": 0.0, "topic_conf": 0.0}
+        for topic in TOPICS
+    }
 
-    for a in analyses:
-        if a.ocr_blocks:
-            confs = [b["confidence"] for b in a.ocr_blocks]
-            avg_ocr_conf += sum(confs) / len(confs)
-            if a.main_topic:
-                topic_stats[a.main_topic]["ocr_conf"] += sum(confs) / len(confs)
+    for analysis in analyses:
+        _process_single_analysis(analysis, topic_stats, topics, colors)
 
-        if a.detected_objects:
-            confs = [o["confidence"] for o in a.detected_objects]
-            avg_obj_conf += sum(confs) / len(confs)
-            if a.main_topic:
-                topic_stats[a.main_topic]["obj_conf"] += sum(confs) / len(confs)
+    total_ocr_confs = sum(stats.get("ocr_conf", 0.0) for stats in topic_stats.values())
+    total_obj_confs = sum(stats.get("obj_conf", 0.0) for stats in topic_stats.values())
+    total_topic_confs = sum(stats.get("topic_conf", 0.0) for stats in topic_stats.values())
 
-        if a.main_topic:
-            topic = a.main_topic
-            topics[topic] = topics.get(topic, 0) + 1
-            topic_stats[topic]["count"] += 1
-
-        if a.topic_confidence:
-            topic_stats[a.main_topic]["topic_conf"] += a.topic_confidence
-            avg_topic_conf += a.topic_confidence
-
-        for c in a.dominant_colors or []:
-            hex_color = c.get("hex")
-            if hex_color:
-                colors[hex_color] = colors.get(hex_color, 0) + 1
-
-    avg_ocr_conf = avg_ocr_conf / total_analyses if total_analyses else 0
-    avg_obj_conf = avg_obj_conf / total_analyses if total_analyses else 0
-    avg_topic_conf = avg_topic_conf / total_analyses if total_analyses else 0
+    avg_ocr_conf = total_ocr_confs / total_analyses if total_analyses else 0.0
+    avg_obj_conf = total_obj_confs / total_analyses if total_analyses else 0.0
+    avg_topic_conf = total_topic_confs / total_analyses if total_analyses else 0.0
 
     topics_table = []
     for topic, stats in topic_stats.items():
-        if stats["count"] == 0:
+        count = stats["count"]
+        if count == 0:
             continue
-        topics_table.append(
-            {
-                "Тематики": TOPIC_TRANSLATIONS.get(topic, topic),
-                "Кол-во": stats["count"],
-                "Ср. уверенность (OCR)": f"{stats['ocr_conf'] / stats['count']:.2f}" if stats["count"] else "—",
-                "Ср. уверенность (объекты)": f"{stats['obj_conf'] / stats['count']:.2f}" if stats["count"] else "—",
-                "Cр. уверенность (топики)": f"{stats['topic_conf'] / stats['count']:.2f}" if stats["count"] else "—",
-            },
-        )
+        ocr_total = stats.get("ocr_conf", 0.0)
+        obj_total = stats.get("obj_conf", 0.0)
+        topic_total = stats.get("topic_conf", 0.0)
 
-    # Среднее время на один креатив
+        topics_table.append({
+            "Тематики": TOPIC_TRANSLATIONS.get(topic, topic),
+            "Кол-во": count,
+            "Ср. уверенность (OCR)": f"{ocr_total / count:.2f}" if count else "—",
+            "Ср. уверенность (объекты)": f"{obj_total / count:.2f}" if count else "—",
+            "Cр. уверенность (топики)": f"{topic_total / count:.2f}" if count else "—",
+        })
+
     avg_time_per_creative = total_processing_time / total_creatives_all if total_creatives_all > 0 else 0
 
     color_class_dist = get_color_class_distribution(analyses)
     topic_color_distribution = get_topic_color_distribution(analyses, top_n=5)
-
 
     return {
         "summary": {

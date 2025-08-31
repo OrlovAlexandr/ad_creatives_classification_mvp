@@ -23,17 +23,22 @@ def fetch_groups():
             g["display_name"] = g["group_id"]
     return data
 
+
 def fetch_analytics(group_id):
     return make_request("GET", f"/analytics/group/{group_id}")
+
 
 def fetch_analytics_all():
     return make_request("GET", "/analytics/all")
 
+
 def fetch_creatives_by_group(group_id):
     return make_request("GET", f"/groups/{group_id}/creatives")
 
+
 def fetch_creative_details(creative_id):
     return make_request("GET", f"/creatives/{creative_id}")
+
 
 def upload_files(files, group_id, creative_ids, original_filenames):
     url = f"{get_backend_url()}/upload"

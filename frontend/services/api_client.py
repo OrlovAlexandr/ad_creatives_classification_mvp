@@ -5,9 +5,11 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
 def get_backend_url():
     from config import BACKEND_URL
     return BACKEND_URL
+
 
 def make_request(method, endpoint, **kwargs):
     url = f"{get_backend_url()}{endpoint}"

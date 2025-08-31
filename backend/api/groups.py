@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 router = APIRouter()
 
+
 @router.get("/groups")
 def get_groups(db: Session = Depends(get_db)):
     """Список групп креативов."""
@@ -16,7 +17,7 @@ def get_groups(db: Session = Depends(get_db)):
         # Количество креативов в группе
         count = db.query(Creative).filter(
             Creative.group_id == group_id,
-            ).count()
+        ).count()
 
         # Первый креатив в группе (дата создания)
         first = db.query(Creative.upload_timestamp).filter(

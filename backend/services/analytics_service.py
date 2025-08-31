@@ -32,6 +32,7 @@ def calculate_group_processing_time(db: Session, group_id: str) -> tuple[float, 
 
     return total_time, len(analyses)
 
+
 def get_color_class_distribution(analyses):
     class_distribution = {}
 
@@ -42,6 +43,7 @@ def get_color_class_distribution(analyses):
                 class_distribution[class_name] = class_distribution.get(class_name, 0) + info["percent"]
 
     return class_distribution
+
 
 def get_topic_color_distribution(analyses, top_n=5):
     topic_data = {}

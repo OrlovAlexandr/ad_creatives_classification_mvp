@@ -12,19 +12,23 @@ from sklearn.cluster import KMeans
 
 logger = logging.getLogger(__name__)
 
+
 def rgb_to_hsv_array(rgb_array):
     rgb_norm = rgb_array / 255.0
     return np.apply_along_axis(lambda rgb: colorsys.rgb_to_hsv(rgb[0], rgb[1], rgb[2]), 1, rgb_norm)
 
+
 def rgb_to_hex(rgb_tuple):
     return f"#{int(rgb_tuple[0]):02x}{int(rgb_tuple[1]):02x}{int(rgb_tuple[2]):02x}"
 
+
 # RGB (0-255) в HSV (H: 0-360, S: 0-100, V: 0-100)
 def rgb_to_hsv_single(r, g, b):
-    h, s, v = colorsys.rgb_to_hsv(r/255.0, g/255.0, b/255.0)
+    h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
     return h * 360, s * 100, v * 100
 
-PALETTE_RGB = np.array([tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4)) for hex_color in PALETTE_HEX])
+
+PALETTE_RGB = np.array([tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4)) for hex_color in PALETTE_HEX])
 PALETTE_HSV = rgb_to_hsv_array(PALETTE_RGB)
 MONOCHROME_INDICES = [i for i, hex_color in enumerate(PALETTE_HEX) if hex_color in MONOCHROME_HEX_SET]
 NON_MONOCHROME_INDICES = [i for i, hex_color in enumerate(PALETTE_HEX) if hex_color not in MONOCHROME_HEX_SET]
@@ -35,14 +39,17 @@ for class_name, hex_colors in COLOR_CLASSES.items():
         HEX_TO_CLASS[hex_color] = class_name
 
 EXPECTED_COLOR_CHANNELS = 3
+MIN_COLOR_VALUE_PERCENT = 15
+MIN_COLOR_SATURATION_PERCENT = 15
+
 
 def get_top_colors(
         image_path: str,
-        n_dominant: int=3,
-        n_secondary: int=3,
-        resize_size: tuple=(300, 300),
-        n_coeff: float=1.0,
-        ) -> dict:
+        n_dominant: int = 3,
+        n_secondary: int = 3,
+        resize_size: tuple = (300, 300),
+        n_coeff: float = 1.0,
+) -> dict:
     try:
         logger.info(f"[Цвета] Начало обработки изображения: {image_path}")
         image = Image.open(image_path).convert('RGB')
@@ -85,7 +92,7 @@ def get_top_colors(
                 "hex": rgb_to_hex(centroid),
                 "percent": percentage,
             })
-            logger.info(f"[Цвета] Цвет {i+1}: RGB {centroid} -> HEX {rgb_to_hex(centroid)} ({percentage}%)")
+            logger.info(f"[Цвета] Цвет {i + 1}: RGB {centroid} -> HEX {rgb_to_hex(centroid)} ({percentage}%)")
 
         dominant_colors = all_colors[:n_dominant]
         secondary_colors = all_colors[n_dominant:n_dominant + n_secondary]
@@ -107,7 +114,105 @@ def get_top_colors(
             "secondary_colors": secondary_colors,
         }
 
+
+def _find_closest_monochrome_color(hsv_color):
+    """Находит ближайший монохромный цвет в палитре."""
+    if not MONOCHROME_INDICES:
+        logger.warning("[Классификация] Нет монохромных цветов в палитре.")
+        return None
+
+    try:
+        palette_hsv_mono = PALETTE_HSV[MONOCHROME_INDICES]
+        distances = np.linalg.norm(palette_hsv_mono - hsv_color, axis=1)
+        closest_idx_in_mono = np.argmin(distances)
+
+        closest_idx_in_full_palette = MONOCHROME_INDICES[closest_idx_in_mono]
+        final_hex = PALETTE_HEX[closest_idx_in_full_palette]
+
+        logger.debug(
+            f"[Классификация] Цвет притянут к монохромному {final_hex} "
+            f"(расстояние: {distances[closest_idx_in_mono]:.4f})",
+        )
+
+    except Exception:
+        logger.exception("[Классификация] Ошибка при поиске ближайшего монохромного цвета")
+        return None
+    else:
+        return final_hex
+
+
+def _find_closest_chromatic_color(hsv_color):
+    """Находит ближайший цветной (немонохромный) цвет в палитре."""
+    if not NON_MONOCHROME_INDICES:
+        logger.warning("[Классификация] Нет немонохромных цветов в палитре.")
+        return None
+
+    try:
+        palette_hsv_non_mono = PALETTE_HSV[NON_MONOCHROME_INDICES]
+        distances = np.linalg.norm(palette_hsv_non_mono - hsv_color, axis=1)
+        closest_idx_in_non_mono = np.argmin(distances)
+
+        closest_idx_in_full_palette = NON_MONOCHROME_INDICES[closest_idx_in_non_mono]
+        final_hex = PALETTE_HEX[closest_idx_in_full_palette]
+
+        logger.debug(
+            f"[Классификация] Цвет притянут к цветному {final_hex} "
+            f"(расстояние: {distances[closest_idx_in_non_mono]:.4f})",
+        )
+    except Exception:
+        logger.exception("[Классификация] Ошибка при поиске ближайшего цветного цвета")
+        return None
+    else:
+        return final_hex
+
+
+def _classify_single_color(color_info):
+    """Классифицирует один цвет и возвращает его окончательный HEX и класс."""
+    hex_color = color_info.get("hex", "").lstrip("#")  # Убираем '#'
+    rgb_color = np.array(color_info.get("rgb", []))
+    percent = color_info.get("percent", 0.0)
+
+    if not hex_color or len(rgb_color) != EXPECTED_COLOR_CHANNELS:
+        logger.warning(f"[Классификация] Пропущен цвет с некорректными данными: {color_info}")
+        return None, None, 0.0
+
+    try:
+        hsv_color = rgb_to_hsv_array(rgb_color.reshape(1, -1))[0]  # (H, S, V)
+        _, s, v = hsv_color
+        saturation_percent = s * 100
+        value_percent = v * 100
+        final_hex = hex_color  # По умолчанию
+
+        # Определение цвета на основе S и V
+        if value_percent <= MIN_COLOR_VALUE_PERCENT:
+            logger.debug(f"[Классификация] Цвет {hex_color} очень темный. Присваиваем класс 'Черный'.")
+            final_hex = "000000"
+        elif saturation_percent <= MIN_COLOR_SATURATION_PERCENT:
+            logger.debug(f"[Классификация] Цвет {hex_color} имеет низкую насыщенность. Ищем ближайший монохромный.")
+            result = _find_closest_monochrome_color(hsv_color)
+            if result:
+                final_hex = result
+        else:
+            logger.debug(
+                f"[Классификация] Цвет {hex_color} цветной (S > 15%, V > 15%). Ищем ближайший немонохромный.",
+            )
+            result = _find_closest_chromatic_color(hsv_color)
+            if result:
+                final_hex = result
+
+        # Классификация по палитре
+        color_class = HEX_TO_CLASS.get(final_hex, "Неизвестно")
+        logger.info(f"[Классификация] Цвет {hex_color} ({percent}%) -> Палитра {final_hex} -> Класс {color_class}")
+
+    except Exception:
+        logger.exception("[Классификация] Ошибка при обработке цвета {hex_color}")
+        return None, None, 0.0
+    else:
+        return final_hex, color_class, percent
+
+
 def classify_colors_by_palette(colors_result: dict) -> dict:
+    """Классифицирует цвета по палитре."""
     try:
         logger.info("[Классификация] Начало классификации цветов по палитре (HSV, новый порядок).")
         classified_colors = {}
@@ -118,68 +223,12 @@ def classify_colors_by_palette(colors_result: dict) -> dict:
             logger.info("[Классификация] Нет цветов для классификации.")
             return {}
 
+        # Обработка каждого цвета
         for color_info in all_colors_to_process:
-            hex_color = color_info.get("hex", "").lstrip("#") # Убираем '#'
-            rgb_color = np.array(color_info.get("rgb", []))
-            percent = color_info.get("percent", 0.0)
+            final_hex, color_class, percent = _classify_single_color(color_info)
 
-            if not hex_color or len(rgb_color) != EXPECTED_COLOR_CHANNELS:
-                logger.warning(f"[Классификация] Пропущен цвет с некорректными данными: {color_info}")
+            if final_hex is None or color_class is None:
                 continue
-
-            final_hex = hex_color # По умолчанию, если что-то пойдет не так
-
-            hsv_color = rgb_to_hsv_array(rgb_color.reshape(1, -1))[0] # (H, S, V)
-            _, s, v = hsv_color
-            saturation_percent = s * 100
-            value_percent = v * 100
-
-            # Если V <= 15%, то Черный
-            if value_percent <= 15:
-                logger.debug(f"[Классификация] Цвет {hex_color} очень темный. Присваиваем класс 'Черный'.")
-                final_hex = "000000"
-            # Если S <= 15%, то ищем близость к монохромным цветам
-            elif saturation_percent <= 15:
-                logger.debug(f"[Классификация] Цвет {hex_color} имеет низкую насыщенность. Ищем ближайший монохромный.")
-                if MONOCHROME_INDICES:
-                    palette_hsv_mono = PALETTE_HSV[MONOCHROME_INDICES]
-                    distances = np.linalg.norm(palette_hsv_mono - hsv_color, axis=1)
-                    closest_idx_in_mono = np.argmin(distances)
-
-                    closest_idx_in_full_palette = MONOCHROME_INDICES[closest_idx_in_mono]
-                    final_hex = PALETTE_HEX[closest_idx_in_full_palette]
-                    logger.debug(
-                        f"[Классификация] Цвет {hex_color} притянут к монохромному {final_hex} "
-                        f"(расстояние: {distances[closest_idx_in_mono]:.4f})",
-                        )
-                else:
-                     logger.warning(
-                         f"[Классификация] Нет монохромных цветов в палитре для {hex_color}. Оставляем как есть.",
-                     )
-            # Иначе ищем близость к цветным
-            else:
-                logger.debug(
-                    f"[Классификация] Цвет {hex_color} цветной (S > 15%, V > 15%). Ищем ближайший немонохромный.",
-                )
-                if NON_MONOCHROME_INDICES:
-                    palette_hsv_non_mono = PALETTE_HSV[NON_MONOCHROME_INDICES]
-                    distances = np.linalg.norm(palette_hsv_non_mono - hsv_color, axis=1)
-                    closest_idx_in_non_mono = np.argmin(distances)
-
-                    closest_idx_in_full_palette = NON_MONOCHROME_INDICES[closest_idx_in_non_mono]
-                    final_hex = PALETTE_HEX[closest_idx_in_full_palette]
-                    logger.debug(
-                        f"[Классификация] Цвет {hex_color} притянут к цветному {final_hex} "
-                        f"(расстояние: {distances[closest_idx_in_non_mono]:.4f})",
-                    )
-                else:
-                     logger.warning(
-                         f"[Классификация] Нет немонохромных цветов в палитре для {hex_color}. Оставляем дефолт.",
-                     )
-
-            # Классификация по палитре
-            color_class = HEX_TO_CLASS.get(final_hex, "Неизвестно")
-            logger.info(f"[Классификация] Цвет {hex_color} ({percent}%) -> Палитра {final_hex} -> Класс {color_class}")
 
             # Суммируем повторяющиеся классы
             if color_class in classified_colors:
@@ -188,13 +237,15 @@ def classify_colors_by_palette(colors_result: dict) -> dict:
             else:
                 classified_colors[color_class] = {
                     "percent": percent,
-                    "hex": f"#{final_hex}", # Добавляем '#'
+                    "hex": f"#{final_hex}",
                 }
 
-        for class_name in classified_colors:
-            classified_colors[class_name]["percent"] = round(classified_colors[class_name]["percent"], 2)
+        # Округление процентов
+        for _class_name in classified_colors:
+            classified_colors[_class_name]["percent"] = round(classified_colors[_class_name]["percent"], 2)
 
         logger.info(f"[Классификация] Классификация завершена. Результат: {classified_colors}")
+
     except Exception as e:
         logger.error(f"[Классификация] Ошибка при классификации цветов: {e}", exc_info=True)
         return {}

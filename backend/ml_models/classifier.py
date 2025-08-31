@@ -17,7 +17,6 @@ from ml_models.preprocessing import yolo_to_vector_for_bert
 logger = logging.getLogger(__name__)
 
 
-
 class MultiModalBertClassifier(nn.Module):
     def __init__(self, model_name, num_numeric_features, num_labels, dropout=0.3, hidden_dim=256):
         super().__init__()
@@ -46,10 +45,12 @@ class MultiModalBertClassifier(nn.Module):
             loss = nn.CrossEntropyLoss()(logits, labels)
         return {'loss': loss, 'logits': logits}
 
+
 class ModelNotFoundError(Exception):
     def __init__(self, model_path):
         self.model_path = model_path
         super().__init__(f"Model not found at {model_path}")
+
 
 def get_bert_model_and_tokenizer():
     def _check_model_file(_model_path):
@@ -152,4 +153,3 @@ def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, Any] 
         return None, 0.0
     else:
         return main_topic_name, confidence
-
