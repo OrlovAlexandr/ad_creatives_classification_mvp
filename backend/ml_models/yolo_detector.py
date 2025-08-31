@@ -1,31 +1,40 @@
-import os
+import logging
+from pathlib import Path
+
+import numpy as np
+from config import CONF_THRESHOLD
+from config import settings
 from PIL import Image
 from ultralytics import YOLO
-from config import settings
-import numpy as np
 
-from config import COCO_CLASSES, CONF_THRESHOLD
-import logging
 
 logger = logging.getLogger(__name__)
 
 _yolo_model = None
 
+NUM_COLOR_CHANNELS = 4
+
+
+class YOLOModelNotFoundError(FileNotFoundError):
+    def __init__(self, model_path):
+        message = f"Модель YOLO не найдена по пути {model_path}"
+        super().__init__(message)
+
 
 def get_yolo_model():
-    global _yolo_model
+    global _yolo_model  # noqa: PLW0603
     if _yolo_model is None:
-        model_path = os.path.join(settings.MODEL_CACHE_DIR, settings.YOLO_MODEL_PATH)
-        if not os.path.exists(model_path):
+        model_path = Path(settings.MODEL_CACHE_DIR) / settings.YOLO_MODEL_PATH
+        if not model_path.exists():
             logger.error(f"Модель YOLO не найдена по пути {model_path}")
-            raise FileNotFoundError(f"YOLO model not found at {model_path}")
+            raise YOLOModelNotFoundError(model_path)
         try:
             device = settings.DEVICE
             logger.info(f"Загрузка модели YOLO на устройство: {device}")
             _yolo_model = YOLO(model_path).to(device)
             logger.info("Модель YOLO успешно инициализирована.")
-        except Exception as e:
-            logger.error(f"Ошибка при инициализации модели YOLO: {e}")
+        except Exception:
+            logger.exception("Ошибка при инициализации модели YOLO")
             raise
     return _yolo_model
 
@@ -37,7 +46,7 @@ def detect_objects(image_path: str, conf_threshold: float = CONF_THRESHOLD) -> l
         img_width, img_height = image_pil.size
         image_array = np.array(image_pil)
 
-        if image_array.shape[-1] == 4:
+        if image_array.shape[-1] == NUM_COLOR_CHANNELS:
             image_array = image_array[:, :, :3]
 
         device = settings.DEVICE
@@ -60,12 +69,12 @@ def detect_objects(image_path: str, conf_threshold: float = CONF_THRESHOLD) -> l
                 detections.append({
                     "class": class_name,
                     "confidence": confidence,
-                    "bbox": [x1_norm, y1_norm, x2_norm, y2_norm]
+                    "bbox": [x1_norm, y1_norm, x2_norm, y2_norm],
                 })
 
         detections.sort(key=lambda x: x['confidence'], reverse=True)
         return detections[:3]
 
-    except Exception as e:
-        logger.error(f"Ошибка при выполнении детекции YOLO для {image_path}: {e}")
+    except Exception:
+        logger.exception(f"Ошибка при выполнении детекции YOLO для {image_path}")
         raise

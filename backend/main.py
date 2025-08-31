@@ -1,7 +1,8 @@
-from fastapi import FastAPI
-from core import lifespan
-from api import router
 import logging
+
+from api import router
+from core import lifespan
+from fastapi import FastAPI
 
 
 logging.basicConfig(level=logging.INFO)

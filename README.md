@@ -49,6 +49,7 @@ cd ad_creatives_classification_mvp
 cp .env.example .env
 docker-compose up --build
 ```
+
 Веса модели и тестовый набор данных можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ). Веса необходимо положить в папку minio_init и выполнить команду 
 ```shell
 unzip models.zip 
@@ -98,10 +99,11 @@ ad_creatives_classification/
 ## Используемые технологии и архитектура  
 
 Фронтенд реализован на Streamlit:  
-- page_upload – загрузка креативов и отображение статуса обработки  
-- page_analytics – аналитика по группам и всем креативам  
-- page_details – детали одного креатива с визуализацией
-Бэкенд работает на FastAPI и предоставляет REST API для обработки (`upload`, status, creatives, `analytics`).  
+- `page_upload` – загрузка креативов и отображение статуса обработки  
+- `page_analytics` – аналитика по группам и всем креативам  
+- `page_details` – детали одного креатива с визуализацией  
+
+Бэкенд работает на FastAPI и предоставляет REST API для обработки (`upload`, `status`, `creatives`, `analytics`).  
 В качестве базы данных используется PostgreSQL. Контейнеризация выполнена с помощью Docker и Docker Compose.  
 
 Используемые ML-модели:  
@@ -120,7 +122,7 @@ ad_creatives_classification/
 - таблицы уверенности и времени обработки  
 
 Архитектура системы:  
-Streamlit(ui) <-> FastAPI -> PostgreSQL -> MinIO <-> Redis (Celery)
+`Streamlit(ui) <-> FastAPI -> PostgreSQL -> MinIO <-> Redis (Celery)`
 
 
 Как работает система:  

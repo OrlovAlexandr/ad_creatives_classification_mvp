@@ -1,13 +1,11 @@
 from datetime import datetime
+
 import streamlit as st
+from pages import page_analytics
+from pages import page_details
+from pages import page_settings
+from pages import page_upload
 
-
-from pages import (
-    page_upload, 
-    page_analytics, 
-    page_details, 
-    page_settings
-    )
 
 st.set_page_config(page_title="Классификатор креативов", layout="wide")
 
@@ -18,9 +16,9 @@ page = st.navigation(
             st.Page(page_analytics, title="Аналитика"),
             st.Page(page_details, title="Детали креатива"),
             st.Page(page_settings, title="Настройки"),
-        ]
-    }
+        ],
+    },
 )
 page.run()
 
-st.sidebar.caption(f"Последнее действие: {datetime.now().strftime('%H:%M:%S')}")
+st.sidebar.caption(f"Последнее действие: {datetime.utcnow().strftime('%H:%M:%S')}")

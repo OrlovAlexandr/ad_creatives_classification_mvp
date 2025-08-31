@@ -1,16 +1,21 @@
-import streamlit as st
-import requests
-from config import BACKEND_URL
 import logging
+from http import HTTPStatus
+
+import requests
+import streamlit as st
+from config import BACKEND_URL
+
 
 logger = logging.getLogger(__name__)
+HTTP_OK = HTTPStatus.OK
+
 
 def page_settings():
     st.header("Настройки приложения")
 
     try:
-        response = requests.get(f"{BACKEND_URL}/settings/")
-        if response.status_code == 200:
+        response = requests.get(f"{BACKEND_URL}/settings/", timeout=10)
+        if response.status_code == HTTP_OK:
             settings_data = response.json()
         else:
             st.error(f"Ошибка получения настроек: {response.status_code}")
@@ -27,7 +32,7 @@ def page_settings():
         min_value=1,
         max_value=10,
         value=int(current_dominant),
-        key="dominant_colors_count"
+        key="dominant_colors_count",
     )
 
     current_secondary = settings_data.get("SECONDARY_COLORS_COUNT", 3)
@@ -36,7 +41,7 @@ def page_settings():
         min_value=1,
         max_value=10,
         value=int(current_secondary),
-        key="secondary_colors_count"
+        key="secondary_colors_count",
     )
 
     # Кнопка сохранения
@@ -49,8 +54,8 @@ def page_settings():
 
         if updates:
             try:
-                response = requests.put(f"{BACKEND_URL}/settings/", json=updates)
-                if response.status_code == 200:
+                response = requests.put(f"{BACKEND_URL}/settings/", json=updates, timeout=10)
+                if response.status_code == HTTP_OK:
                     st.success("Настройки успешно сохранены!")
                     st.rerun()
                 else:

@@ -1,5 +1,7 @@
-import os
+import os  # noqa: INP001
+
 from dotenv import load_dotenv
+
 
 load_dotenv()
 
@@ -28,7 +30,7 @@ TOPIC_TRANSLATIONS = {
     'ties': 'Галстуки',
     'bags': 'Сумки',
     'cups': 'Кружки',
-    'clocks': 'Часы'
+    'clocks': 'Часы',
 }
 
 COLOR_VISUAL_CLASSES = {
@@ -48,5 +50,5 @@ COLOR_VISUAL_CLASSES = {
     "Темно-серый": {"404040"},
     "Серый": {"808080"},
     "Светло-серый": {"bfbfbf"},
-    "Белый": {"f7f7f7"}
+    "Белый": {"f7f7f7"},
 }

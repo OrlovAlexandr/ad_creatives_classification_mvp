@@ -1,18 +1,20 @@
+from config import COLOR_CLASSES
+from config import COLOR_VISUAL_CLASSES
+from database_models.creative import Creative
+from database_models.creative import CreativeAnalysis
 from sqlalchemy.orm import Session
-from database_models.creative import Creative, CreativeAnalysis
-from config import COLOR_CLASSES, COLOR_VISUAL_CLASSES
 
 
 def calculate_group_processing_time(db: Session, group_id: str) -> tuple[float, int]:
     analyses = db.query(
         CreativeAnalysis.ocr_started_at,
-        CreativeAnalysis.analysis_timestamp
+        CreativeAnalysis.analysis_timestamp,
     ).join(
         Creative,
-        Creative.creative_id == CreativeAnalysis.creative_id
+        Creative.creative_id == CreativeAnalysis.creative_id,
     ).filter(
         Creative.group_id == group_id,
-        CreativeAnalysis.overall_status == "SUCCESS"
+        CreativeAnalysis.overall_status == "SUCCESS",
     ).all()
 
     if not analyses:
@@ -30,6 +32,7 @@ def calculate_group_processing_time(db: Session, group_id: str) -> tuple[float, 
 
     return total_time, len(analyses)
 
+
 def get_color_class_distribution(analyses):
     class_distribution = {}
 
@@ -40,6 +43,7 @@ def get_color_class_distribution(analyses):
                 class_distribution[class_name] = class_distribution.get(class_name, 0) + info["percent"]
 
     return class_distribution
+
 
 def get_topic_color_distribution(analyses, top_n=5):
     topic_data = {}
@@ -75,11 +79,11 @@ def get_topic_color_distribution(analyses, top_n=5):
             normalized = [100 / len(percents)] * len(percents)  # на случай, если все нули
 
         result[topic] = []
-        for (class_name, data), norm_percent in zip(top_colors, normalized):
+        for (class_name, data), norm_percent in zip(top_colors, normalized, strict=False):
             result[topic].append({
                 "class": class_name,
                 "hex": data["hex"],
-                "percent": norm_percent
+                "percent": norm_percent,
             })
 
     return result

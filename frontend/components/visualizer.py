@@ -1,12 +1,14 @@
+import logging
+import os
+from io import BytesIO
+
 import cv2
 import numpy as np
-from PIL import Image
 import requests
-from io import BytesIO
-from icecream import ic
-import os
 from dotenv import load_dotenv
-import logging
+from icecream import ic
+from PIL import Image
+
 
 logger = logging.getLogger(__name__)
 
@@ -26,24 +28,39 @@ MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL")
 if not MINIO_PUBLIC_URL:
     MINIO_PUBLIC_URL = MINIO_BASE_URL
 
+BBOX_COORDINATES = 4
+
+
+class InvalidImageSourceError(ValueError):
+    default_message = "Необходимо указать image_path_or_url или image_url"
+
+
+class ImageLoadingError(RuntimeError):
+    def __init__(self, img_source, error):
+        self.img_source = img_source
+        self.error = error
+        super().__init__(f"Ошибка при загрузке изображения {img_source}: {error}")
+
 
 def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
                         detected_objects=None,
                         ocr_color=(0, 255, 0), obj_color=(0, 255, 255)):
-    if ocr_blocks is None: ocr_blocks = []
-    if detected_objects is None: detected_objects = []
+    if ocr_blocks is None:
+        ocr_blocks = []
+    if detected_objects is None:
+        detected_objects = []
 
     img_source = image_url or image_path_or_url
     if not img_source:
-        raise ValueError("Необходимо указать image_path_or_url или image_url")
+        raise InvalidImageSourceError
 
     # Загружаем изображение
     try:
-        ic(f"Загрузка изображения до отрисовки: {img_source}")
+        logger.debug(f"Загрузка изображения до отрисовки: {img_source}")
 
         if img_source.startswith(('http://', 'https://')):
-            # Загрузка по URL            
-            response = requests.get(img_source)
+            # Загрузка по URL
+            response = requests.get(img_source, timeout=10)
             response.raise_for_status()
             image = Image.open(BytesIO(response.content)).convert("RGB")
             ic(image)
@@ -56,19 +73,13 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
         h, w, _ = img_array.shape
         img_cv = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
     except requests.RequestException as e:
-        logger.error(f"Ошибка при загрузке {img_source}: {e}")
-        raise RuntimeError(f"Ошибка сети при загрузке {img_source}: {e}")
-    except (FileNotFoundError, OSError) as e:
-        logger.error(f"Ошибка при загрузке изображения из локального файла {img_source}: {e}")
-        raise RuntimeError(f"Не удалось открыть файл {img_source}: {e}")
-    except Exception as e:
-        logger.error(f"Неизвестная ошибка при загрузке изображения {img_source}: {e}")
-        raise RuntimeError(f"Неизвестная ошибка при загрузке {img_source}: {e}")
+        logger.exception(f"Ошибка при загрузке {img_source}")
+        raise ImageLoadingError(img_source, e) from e
 
     # Рисуем OCR-рамки
     for block in ocr_blocks:
         bbox = block.get("bbox")
-        if not bbox or len(bbox) != 4:
+        if not bbox or len(bbox) != BBOX_COORDINATES:
             continue
         x1, y1, x2, y2 = int(bbox[0] * w), int(bbox[1] * h), int(bbox[2] * w), int(bbox[3] * h)
         cv2.rectangle(img_cv, (x1, y1), (x2, y2), ocr_color, 2)
@@ -80,7 +91,7 @@ def draw_bounding_boxes(image_path_or_url=None, image_url=None, ocr_blocks=None,
     # Рисуем объекты
     for obj in detected_objects:
         bbox = obj.get("bbox")
-        if not bbox or len(bbox) != 4:
+        if not bbox or len(bbox) != BBOX_COORDINATES:
             continue
         x1, y1, x2, y2 = int(bbox[0] * w), int(bbox[1] * h), int(bbox[2] * w), int(bbox[3] * h)
         cv2.rectangle(img_cv, (x1, y1), (x2, y2), obj_color, 2)
@@ -113,7 +124,7 @@ def _draw_label(image_cv, text, position, bg_color, text_color):
         (text_x, text_y - text_height - padding),
         (text_x + text_width + 2 * padding, text_y + padding),
         bg_color,
-        -1
+        -1,
     )
 
     cv2.putText(
@@ -124,5 +135,5 @@ def _draw_label(image_cv, text, position, bg_color, text_color):
         font_scale,
         text_color,
         font_thickness,
-        cv2.LINE_AA
+        cv2.LINE_AA,
     )

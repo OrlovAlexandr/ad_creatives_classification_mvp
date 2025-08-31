@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from database import get_db
-from database_models.creative import Creative, CreativeAnalysis
-from models import CreativeBase, CreativeDetail
-from config import settings
 import logging
+
+from config import settings
+from database import get_db
+from database_models.creative import Creative
+from database_models.creative import CreativeAnalysis
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
+from models import CreativeBase
+from models import CreativeDetail
+from sqlalchemy.orm import Session
+
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +50,7 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
         "file_format": creative.file_format,
         "image_width": creative.image_width,
         "image_height": creative.image_height,
-        "upload_timestamp": creative.upload_timestamp.isoformat()
+        "upload_timestamp": creative.upload_timestamp.isoformat(),
     }
 
     if analysis and analysis.overall_status == "SUCCESS":
@@ -56,25 +62,25 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
             "ocr_blocks": analysis.ocr_blocks,
             "detected_objects": analysis.detected_objects,
             "main_topic": analysis.main_topic,
-            "topic_confidence": analysis.topic_confidence
+            "topic_confidence": analysis.topic_confidence,
         }
     else:
         analysis_data = None
 
-    result = CreativeBase(**creative_data) 
+    result = CreativeBase(**creative_data)
     return CreativeDetail(**result.model_dump(), analysis=analysis_data)
 
 
 @router.get("/groups/{group_id}/creatives")
 def get_creatives_by_group(group_id: str, db: Session = Depends(get_db)):
     creatives = db.query(Creative).filter(
-        Creative.group_id == group_id
+        Creative.group_id == group_id,
         ).all()
 
     result = []
     for c in creatives:
         analysis = db.query(CreativeAnalysis).filter(
-            CreativeAnalysis.creative_id == c.creative_id
+            CreativeAnalysis.creative_id == c.creative_id,
         ).first()
 
         result.append({
@@ -86,6 +92,6 @@ def get_creatives_by_group(group_id: str, db: Session = Depends(get_db)):
             "image_width": c.image_width,
             "image_height": c.image_height,
             "upload_timestamp": c.upload_timestamp.isoformat(),
-            "analysis": analysis is not None and analysis.overall_status == "SUCCESS"
+            "analysis": analysis is not None and analysis.overall_status == "SUCCESS",
         })
     return result

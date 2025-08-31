@@ -1,18 +1,18 @@
-from datetime import datetime
-import random
-import time
-import os
-
-from config import settings, TOPICS, NUM_COCO, NUM_LABELS
-from ml_models.preprocessing import clean_text_for_bert, yolo_to_vector_for_bert
 import logging
+import pathlib
+from typing import Any
 
+import torch
+from config import NUM_COCO
+from config import NUM_LABELS
+from config import settings
+from torch import nn
 from transformers import AutoModel
 from transformers import AutoTokenizer
-import torch
-from torch import nn
 
-from icecream import ic
+from ml_models.preprocessing import clean_text_for_bert
+from ml_models.preprocessing import yolo_to_vector_for_bert
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class MultiModalBertClassifier(nn.Module):
         self.fc2 = nn.Linear(hidden_dim, num_labels)
 
     def forward(self, input_ids, attention_mask, yolo_vec, labels=None):
-        # Получаем эмбеддинг 
+        # Получаем эмбеддинг
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         # лучше mean-pooling по токенам:
         last_hidden = outputs.last_hidden_state
@@ -46,54 +46,56 @@ class MultiModalBertClassifier(nn.Module):
         return {'loss': loss, 'logits': logits}
 
 
-_bert_model = None
-_bert_tokenizer = None
+class ModelNotFoundError(Exception):
+    def __init__(self, model_path):
+        self.model_path = model_path
+        super().__init__(f"Model not found at {model_path}")
 
 
 def get_bert_model_and_tokenizer():
-    global _bert_model, _bert_tokenizer
-    if _bert_model is None or _bert_tokenizer is None:
-        logger.info("Загрузка модели BERT и токенизатора")
-        try:
-            tokenizer_name = settings.BERT_TOKENIZER_NAME
-            logger.info(f"Инициализация токенизатора: {tokenizer_name}")
-            _bert_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
-            logger.info("Токенизатор успешно инициализирован.")
+    def _check_model_file(_model_path):
+        if not _model_path.exists():
+            logger.error(f"Модель BERT не найдена по пути {_model_path}")
+            raise ModelNotFoundError(_model_path)
 
-            model_path = os.path.join(settings.MODEL_CACHE_DIR, settings.BERT_MODEL_PATH)
-            if not os.path.exists(model_path):
-                logger.error(f"Модель BERT не найдена по пути {model_path}")
-                raise FileNotFoundError(f"BERT model not found at {model_path}")
+    logger.info("Загрузка модели BERT и токенизатора")
+    try:
+        tokenizer_name = settings.BERT_TOKENIZER_NAME
+        logger.info(f"Инициализация токенизатора: {tokenizer_name}")
+        _bert_tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+        logger.info("Токенизатор успешно инициализирован.")
 
-            device = torch.device(settings.DEVICE)
-            logger.info(f"Загрузка весов модели BERT с устройства: {device}")
+        model_path = pathlib.Path(settings.MODEL_CACHE_DIR) / settings.BERT_MODEL_PATH
+        _check_model_file(model_path)
 
-            vocab_size = _bert_tokenizer.vocab_size
-            yolo_vec_size = NUM_COCO
-            num_labels = NUM_LABELS
+        device = torch.device(settings.DEVICE)
+        logger.info(f"Загрузка весов модели BERT с устройства: {device}")
 
-            _bert_model = MultiModalBertClassifier(
-                model_name=tokenizer_name,
-                num_numeric_features=yolo_vec_size,
-                num_labels=num_labels,
-                dropout=0.3,
-                hidden_dim=256
-            )
-            logger.info(f"Модель BERT инициализирована.")
+        yolo_vec_size = NUM_COCO
+        num_labels = NUM_LABELS
 
-            checkpoint = torch.load(model_path, map_location=device)
+        _bert_model = MultiModalBertClassifier(
+            model_name=tokenizer_name,
+            num_numeric_features=yolo_vec_size,
+            num_labels=num_labels,
+            dropout=0.3,
+            hidden_dim=256,
+        )
+        logger.info("Модель BERT инициализирована.")
 
-            _bert_model.load_state_dict(checkpoint)
-            _bert_model.to(device)
-            _bert_model.eval()
-            logger.info("Модель BERT и токенизатор успешно загружены и находятся в режиме eval.")
-        except Exception as e:
-            logger.error(f"Ошибка при инициализации или загрузке весов модели BERT: {e}")
-            raise
+        checkpoint = torch.load(model_path, map_location=device)
+
+        _bert_model.load_state_dict(checkpoint)
+        _bert_model.to(device)
+        _bert_model.eval()
+        logger.info("Модель BERT и токенизатор успешно загружены и находятся в режиме eval.")
+    except Exception:
+        logger.exception("Ошибка при инициализации или загрузке весов модели BERT.")
+        raise
     return _bert_model, _bert_tokenizer
 
 
-def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, float]:
+def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, Any] | tuple[None, float]:
     logger.info("Классификация креатива...")
     try:
         logger.info("Начало классификации креатива.")
@@ -120,7 +122,7 @@ def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, float
             return_tensors='pt',
             padding='max_length',
             truncation=True,
-            max_length=160
+            max_length=160,
         )
         input_ids = encoding['input_ids']
         attention_mask = encoding['attention_mask']
@@ -134,8 +136,9 @@ def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, float
 
         logger.debug("Шаг 5: Выполнение предсказания моделью.")
         with torch.no_grad():
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, yolo_vec=yolo_vec)
-
+            outputs = model.forward(
+                input_ids=input_ids, attention_mask=attention_mask, yolo_vec=yolo_vec,
+            )
             logits = outputs['logits']
             probabilities = torch.softmax(logits, dim=1)
             predicted_class_id = torch.argmax(probabilities, dim=1).item()
@@ -145,8 +148,8 @@ def classify_creative(ocr_text: str, detected_objects: list) -> tuple[str, float
         main_topic_name = id_to_topic.get(predicted_class_id, "unknown")
 
         logger.info(f"Классификация завершена. Предсказанная тема: {main_topic_name}, Уверенность: {confidence:.4f}")
-        return main_topic_name, confidence
-
     except Exception as e:
         logger.error(f"Ошибка при классификации креатива: {e}", exc_info=True)
         return None, 0.0
+    else:
+        return main_topic_name, confidence

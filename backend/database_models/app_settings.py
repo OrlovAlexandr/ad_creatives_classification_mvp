@@ -1,5 +1,8 @@
-from sqlalchemy import Column, Integer, String
 from database import Base
+from sqlalchemy import Column
+from sqlalchemy import Integer
+from sqlalchemy import String
+
 
 class AppSettings(Base):
     __tablename__ = "app_settings"
