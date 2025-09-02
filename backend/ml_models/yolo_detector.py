@@ -42,38 +42,52 @@ def get_yolo_model():
 def detect_objects(image_path: str, conf_threshold: float = CONF_THRESHOLD) -> list[dict]:
     model = get_yolo_model()
     try:
-        image_pil = Image.open(image_path)
-        img_width, img_height = image_pil.size
-        image_array = np.array(image_pil)
+        with Image.open(image_path) as image_pil:
+            logger.debug("[YOLO] Изображение открыто успешно")
+            img_width, img_height = image_pil.size
+            image_array = np.array(image_pil)
+            logger.debug(f"[YOLO] Массив NumPy создан. Форма: {image_array.shape}")
 
-        if image_array.shape[-1] == NUM_COLOR_CHANNELS:
-            image_array = image_array[:, :, :3]
+            if image_array.shape[-1] == NUM_COLOR_CHANNELS:
+                logger.debug("[YOLO] Удаление альфа-канала")
+                image_array = image_array[:, :, :3]
 
         device = settings.DEVICE
+        logger.debug(f"[YOLO] Параметры predict, conf={conf_threshold}")
+
         results = model.predict(source=image_array, conf=conf_threshold, device=device)
 
         detections = []
         if results and hasattr(results[0], 'boxes') and results[0].boxes is not None:
             boxes = results[0].boxes
+            box_index = 0
             for box in boxes:
-                class_id = int(box.cls)
-                class_name = model.names[class_id]
-                confidence = float(box.conf.item())
-                bbox_xyxy = box.xyxy.squeeze().tolist()
+                try:
+                    class_id = int(box.cls)
+                    class_name = model.names[class_id]
+                    confidence = float(box.conf.item())
+                    bbox_xyxy = box.xyxy.squeeze().tolist()
 
-                x1_norm = bbox_xyxy[0] / img_width
-                y1_norm = bbox_xyxy[1] / img_height
-                x2_norm = bbox_xyxy[2] / img_width
-                y2_norm = bbox_xyxy[3] / img_height
+                    x1_norm = bbox_xyxy[0] / img_width
+                    y1_norm = bbox_xyxy[1] / img_height
+                    x2_norm = bbox_xyxy[2] / img_width
+                    y2_norm = bbox_xyxy[3] / img_height
 
-                detections.append({
-                    "class": class_name,
-                    "confidence": confidence,
-                    "bbox": [x1_norm, y1_norm, x2_norm, y2_norm],
-                })
+                    detections.append({
+                        "class": class_name,
+                        "confidence": confidence,
+                        "bbox": [x1_norm, y1_norm, x2_norm, y2_norm],
+                    })
+                    box_index += 1
+                except Exception as box_e:
+                    logger.error(f"[YOLO] Ошибка при обработке бокса #{box_index}: {box_e}", exc_info=True)
+                    box_index += 1
 
-        detections.sort(key=lambda x: x['confidence'], reverse=True)
-        return detections[:3]
+            detections.sort(key=lambda x: x['confidence'], reverse=True)
+            return detections[:3]
+        else:
+            logger.info("[YOLO] Объекты не обнаружены или results пустой")
+            return []
 
     except Exception:
         logger.exception(f"Ошибка при выполнении детекции YOLO для {image_path}")

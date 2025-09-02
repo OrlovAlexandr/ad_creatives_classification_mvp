@@ -30,6 +30,9 @@ RUN pip install --no-cache-dir \
     torchaudio==2.7.1 && \
     pip install --no-cache-dir -r requirements.txt
 
+COPY requirements-test.txt .
+RUN pip install --no-cache-dir -r requirements-test.txt
+
 COPY . .
 
 RUN mkdir -p /app/uploads
