@@ -6,12 +6,11 @@ import torch
 from config import NUM_COCO
 from config import NUM_LABELS
 from config import settings
+from ml_models.preprocessing import clean_text_for_bert
+from ml_models.preprocessing import yolo_to_vector_for_bert
 from torch import nn
 from transformers import AutoModel
 from transformers import AutoTokenizer
-
-from ml_models.preprocessing import clean_text_for_bert
-from ml_models.preprocessing import yolo_to_vector_for_bert
 
 
 logger = logging.getLogger(__name__)

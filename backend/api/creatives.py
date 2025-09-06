@@ -7,7 +7,6 @@ from database_models.creative import CreativeAnalysis
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
-from models import CreativeBase
 from models import CreativeDetail
 from sqlalchemy.orm import Session
 
@@ -24,14 +23,14 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
     # Поиск и проверка креатива
     creative = db.query(Creative).filter(Creative.creative_id == creative_id).first()
     if not creative:
-        logger.error(f"Creative {creative_id} not found")
+        logger.error(f"Креатив {creative_id} не найден")
         raise HTTPException(status_code=404, detail="Креатив не найден")
 
     # Поиск и проверка анализа
     analysis = db.query(CreativeAnalysis).filter(
         CreativeAnalysis.creative_id == creative_id).first()
 
-    logger.info(f"Creative {creative_id} found")
+    logger.info(f"Креатив {creative_id} найден")
     if analysis:
         logger.info(f"Статус анализа: {analysis.overall_status}")
         if analysis.overall_status == "ERROR":
@@ -51,24 +50,43 @@ def get_creative(creative_id: str, db: Session = Depends(get_db)):
         "image_width": creative.image_width,
         "image_height": creative.image_height,
         "upload_timestamp": creative.upload_timestamp.isoformat(),
+        "overall_status": None,
+        "ocr_text": None,
+        "ocr_blocks": None,
+        "detected_objects": None,
+        "main_topic": None,
+        "topic_confidence": None,
+        "dominant_colors": None,
+        "secondary_colors": None,
+        "palette_colors": None,
     }
 
     if analysis and analysis.overall_status == "SUCCESS":
-        analysis_data = {
-            "dominant_colors": analysis.dominant_colors,
-            "secondary_colors": analysis.secondary_colors,
-            "palette_colors": analysis.palette_colors,
-            "ocr_text": analysis.ocr_text,
-            "ocr_blocks": analysis.ocr_blocks,
-            "detected_objects": analysis.detected_objects,
-            "main_topic": analysis.main_topic,
-            "topic_confidence": analysis.topic_confidence,
-        }
-    else:
-        analysis_data = None
+        logger.info("Заполнение данных анализа")
+        creative_data.update(
+            {
+                "overall_status": analysis.overall_status,
+                "ocr_text": analysis.ocr_text,
+                "ocr_blocks": analysis.ocr_blocks,
+                "detected_objects": analysis.detected_objects,
+                "main_topic": analysis.main_topic,
+                "topic_confidence": analysis.topic_confidence,
+                "dominant_colors": analysis.dominant_colors,
+                "secondary_colors": analysis.secondary_colors,
+                "palette_colors": analysis.palette_colors,
+            },
+        )
+    elif analysis:
+        logger.info(
+            f"Заполнение данных анализа с ошибкой. Статус анализа: {analysis.overall_status}",
+        )
+        creative_data.update(
+            {
+                "overall_status": analysis.overall_status,
+            },
+        )
 
-    result = CreativeBase(**creative_data)
-    return CreativeDetail(**result.model_dump(), analysis=analysis_data)
+    return CreativeDetail(**creative_data)
 
 
 @router.get("/groups/{group_id}/creatives")

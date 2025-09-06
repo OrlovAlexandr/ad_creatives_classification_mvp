@@ -1,10 +1,16 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import numpy as np
 import torch
 from ml_models.yolo_detector import detect_objects
+import pytest
 
+
+CLOCK_THRESHOLD = 0.85
+PERSON_THRESHOLD = 0.75
+TEST_NUM_DETECTIONS = 2
 
 class TestYoloDetector(unittest.TestCase):
     @patch("ml_models.yolo_detector.get_yolo_model")
@@ -21,13 +27,13 @@ class TestYoloDetector(unittest.TestCase):
         # Mock для clock
         mock_box1 = MagicMock()
         mock_box1.cls = torch.tensor([74])
-        mock_box1.conf = torch.tensor([0.85])
+        mock_box1.conf = torch.tensor([CLOCK_THRESHOLD])
         mock_box1.xyxy = torch.tensor([[50.0, 50.0, 150.0, 150.0]])
 
         # Mock для person
         mock_box2 = MagicMock()
         mock_box2.cls = torch.tensor([0])
-        mock_box2.conf = torch.tensor([0.75])
+        mock_box2.conf = torch.tensor([PERSON_THRESHOLD])
         mock_box2.xyxy = torch.tensor([[200.0, 200.0, 300.0, 300.0]])
 
         # Имитация results[0].boxes
@@ -46,17 +52,15 @@ class TestYoloDetector(unittest.TestCase):
 
         mock_pil_open.assert_called_once_with(temp_path)
         mock_model.predict.assert_called_once()
-        self.assertEqual(len(detections), 2)
+        assert len(detections) == TEST_NUM_DETECTIONS
 
-        self.assertEqual(detections[0]["class"], "clock")
-        self.assertAlmostEqual(
-            detections[0]["confidence"], 0.85, places=6
-        )  # округляем до 6 знаков
+        assert detections[0]["class"] == "clock"
+        assert round(detections[0]["confidence"], 6) == CLOCK_THRESHOLD
         expected_bbox_0 = [50.0 / 400, 50.0 / 400, 150.0 / 400, 150.0 / 400]
         np.testing.assert_allclose(detections[0]["bbox"], expected_bbox_0, atol=1e-5)
 
-        self.assertEqual(detections[1]["class"], "person")
-        self.assertAlmostEqual(detections[1]["confidence"], 0.75, places=6)
+        assert detections[1]["class"] == "person"
+        assert round(detections[1]["confidence"], 6) == PERSON_THRESHOLD
         expected_bbox_1 = [200.0 / 400, 200.0 / 400, 300.0 / 400, 300.0 / 400]
         np.testing.assert_allclose(detections[1]["bbox"], expected_bbox_1, atol=1e-5)
 
@@ -81,7 +85,7 @@ class TestYoloDetector(unittest.TestCase):
 
         mock_pil_open.assert_called_once_with(temp_path)
         mock_model.predict.assert_called_once()
-        self.assertEqual(detections, [])
+        assert detections == []
 
     @patch("ml_models.yolo_detector.get_yolo_model")
     @patch("PIL.Image.open")
@@ -96,12 +100,12 @@ class TestYoloDetector(unittest.TestCase):
         mock_model.predict.side_effect = Exception("Mock YOLO Error")
 
         temp_path = "temp_path_error.jpg"
-        with self.assertRaises(Exception) as context:
+        with pytest.raises(Exception, match="Mock YOLO Error") as exc:
             detect_objects(temp_path)
 
         mock_pil_open.assert_called_once_with(temp_path)
         mock_model.predict.assert_called_once()  # должно быть True
-        self.assertIn("Mock YOLO Error", str(context.exception))
+        assert "Mock YOLO Error" in str(exc.value)
 
 
 if __name__ == "__main__":

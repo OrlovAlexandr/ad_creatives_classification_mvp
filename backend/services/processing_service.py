@@ -9,11 +9,10 @@ from ml_models import classifier
 from ml_models import ocr_model
 from ml_models import yolo_detector
 from PIL import Image
+from services.settings_service import get_setting
 from sqlalchemy.orm import Session
 from utils.color_utils import classify_colors_by_palette
 from utils.color_utils import get_top_colors
-
-from services.settings_service import get_setting
 
 
 logger = logging.getLogger(__name__)
@@ -67,7 +66,6 @@ def perform_ocr(
         db: Session,
         temp_local_path: str,
 ):
-    """Выполняет OCR."""
     logger.info(f"[{creative_id}] Начало OCR...")
     analysis.ocr_status = "PROCESSING"
     analysis.ocr_started_at = datetime.utcnow()
@@ -100,7 +98,6 @@ def perform_detection(
         db: Session,
         temp_local_path: str,
 ):
-    """Выполняет детекцию объектов."""
     logger.info(f"[{creative_id}] Начало детекции...")
     analysis.detection_status = "PROCESSING"
     analysis.detection_started_at = datetime.utcnow()
@@ -127,7 +124,6 @@ def perform_detection(
 
 
 def perform_classification(creative_id: str, analysis: CreativeAnalysis, db: Session):
-    """Выполняет классификацию темы."""
     logger.info(f"[{creative_id}] Начало классификации...")
     analysis.classification_status = "PROCESSING"
     analysis.classification_started_at = datetime.utcnow()
