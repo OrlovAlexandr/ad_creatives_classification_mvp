@@ -40,10 +40,10 @@ services:
     env_file:
       - .env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
+      - ./init_scripts/create_databases.sql:/docker-entrypoint-initdb.d/01_create_databases.sql:ro
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
@@ -91,7 +91,7 @@ services:
     build: ./backend
     env_file:
       - .env
-    command: celery -A tasks worker --loglevel=info --concurrency=2
+    command: celery -A tasks worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-2}
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}

@@ -1,9 +1,16 @@
 import unittest
 
-from database_models.creative import Base, Creative, CreativeAnalysis
+from database_models.creative import Base
+from database_models.creative import Creative
+from database_models.creative import CreativeAnalysis
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from tests.conftest import TOPIC_CONF_THRESHOLD
+
+
+TEST_IMAGE_WIDTH = 800
+TEST_IMAGE_HEIGHT = 600
 
 class TestDatabaseModels(unittest.TestCase):
     def setUp(self):
@@ -24,8 +31,8 @@ class TestDatabaseModels(unittest.TestCase):
             file_path="creatives/test_id_123.jpg",
             file_size=1024,
             file_format="jpg",
-            image_width=800,
-            image_height=600,
+            image_width=TEST_IMAGE_WIDTH,
+            image_height=TEST_IMAGE_HEIGHT,
         )
         self.db.add(creative)
         self.db.commit()
@@ -36,9 +43,10 @@ class TestDatabaseModels(unittest.TestCase):
             .filter(Creative.creative_id == "test_id_123")
             .first()
         )
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.original_filename, "test.jpg")
-        self.assertEqual(retrieved.image_width, 800)
+        assert retrieved is not None
+        assert retrieved.original_filename == "test.jpg"
+        assert retrieved.image_width == TEST_IMAGE_WIDTH
+        assert retrieved.image_height == TEST_IMAGE_HEIGHT
 
     def test_creative_analysis_creation(self):
         # Сначала создаем Creative
@@ -55,7 +63,7 @@ class TestDatabaseModels(unittest.TestCase):
             creative_id="test_id_789",
             ocr_text="Sample OCR text",
             main_topic="Часы",
-            topic_confidence=0.95,
+            topic_confidence=TOPIC_CONF_THRESHOLD,
             overall_status="SUCCESS",
         )
         self.db.add(analysis)
@@ -67,10 +75,10 @@ class TestDatabaseModels(unittest.TestCase):
             .filter(CreativeAnalysis.creative_id == "test_id_789")
             .first()
         )
-        self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.main_topic, "Часы")
-        self.assertEqual(retrieved.topic_confidence, 0.95)
-        self.assertEqual(retrieved.overall_status, "SUCCESS")
+        assert retrieved is not None
+        assert retrieved.main_topic == "Часы"
+        assert retrieved.topic_confidence == TOPIC_CONF_THRESHOLD
+        assert retrieved.overall_status == "SUCCESS"
 
 
 if __name__ == "__main__":

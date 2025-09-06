@@ -66,7 +66,15 @@ class CreativeBase(BaseModel):
 
 
 class CreativeDetail(CreativeBase):
-    analysis: AnalysisBase | None = None
+    overall_status: str | None = None
+    dominant_colors: list[dict] | None = None
+    secondary_colors: list[dict] | None = None
+    palette_colors: dict | None = None
+    ocr_text: str | None = None
+    ocr_blocks: list[dict] | None = None
+    detected_objects: list[dict] | None = None
+    main_topic: str | None = None
+    topic_confidence: float | None = None
 
     class Config:
         from_attributes = True

@@ -1,4 +1,3 @@
-# frontend/pages/page_details.py
 import logging
 
 import pandas as pd
@@ -57,8 +56,8 @@ def _display_image_with_boxes(data):
 
     if is_image_available(minio_endpoint_url):
         try:
-            ocr_blocks = data.get("analysis", {}).get("ocr_blocks", [])
-            detected_objects = data.get("analysis", {}).get("detected_objects", [])
+            ocr_blocks = data.get("ocr_blocks", [])
+            detected_objects = data.get("detected_objects", [])
 
             image_with_boxes = draw_bounding_boxes(
                 image_path_or_url=minio_endpoint_url,
@@ -85,23 +84,26 @@ def _display_basic_info(data):
     st.write(f"**Разрешение:** {data['image_width']}x{data['image_height']}")
     st.write(f"**Дата загрузки:** {data['upload_timestamp'].split('.')[0].replace('T', ' ')}")
 
-    orig_topic = data.get('analysis', {}).get('main_topic', '—')
+    orig_topic = data.get('main_topic', '—')
     translated_topic = TOPIC_TRANSLATIONS.get(
         orig_topic, orig_topic,
     ) if orig_topic != '—' else orig_topic
     st.write(f"**Основная тема:** {translated_topic}")
 
-    topic_confidence = data.get('analysis', {}).get('topic_confidence', '—')
+    topic_confidence = data.get('topic_confidence', '—')
     topic_confidence = round(topic_confidence, 3) if topic_confidence != '—' else '—'
     st.write(f"**Уверенность:** {topic_confidence}")
 
 
 def _display_ocr_info(data):
-    ocr_text = data.get('analysis', {}).get('ocr_text', '—')
+    ocr_text = data.get("ocr_text")
+    if not ocr_text:
+        st.info("Текст не распознан.")
+        return
     st.subheader("Распознанный текст")
     st.text_area("OCR", ocr_text, height=150)
 
-    ocr_blocks = data.get('analysis', {}).get('ocr_blocks', [])
+    ocr_blocks = data.get('ocr_blocks', [])
     if ocr_blocks:
         for block in ocr_blocks:
             if 'bbox' in block and isinstance(block['bbox'], list):
@@ -110,11 +112,11 @@ def _display_ocr_info(data):
         st.write("Блоки текста:")
         st.dataframe(pd.DataFrame(ocr_blocks, columns=['text', 'bbox', 'confidence']))
     else:
-        st.info("Текст не распознан.")
+        st.info("Текстовые блоки отсутствуют.")
 
 
 def _display_detection_info(data):
-    detected_objects = data.get('analysis', {}).get('detected_objects', [])
+    detected_objects = data.get('detected_objects', [])
     if detected_objects:
         for obj in detected_objects:
             if 'bbox' in obj and isinstance(obj['bbox'], list):
@@ -127,9 +129,9 @@ def _display_detection_info(data):
 
 
 def _display_color_info(data):
-    dominant_colors = data.get('analysis', {}).get('dominant_colors', [])
-    secondary_colors = data.get('analysis', {}).get('secondary_colors', [])
-    palette_colors = data.get('analysis', {}).get('palette_colors', {})
+    dominant_colors = data.get('dominant_colors', [])
+    secondary_colors = data.get('secondary_colors', [])
+    palette_colors = data.get('palette_colors', {})
 
     if dominant_colors or secondary_colors or palette_colors:
         st.subheader("Цвета")
@@ -165,7 +167,9 @@ def page_details():
         st.info("Нет доступных групп")
         return
 
-    group_display_map = {g["group_id"]: g["display_name"] for g in groups}
+    groups_sorted = sorted(groups, key=lambda x: x["group_id"], reverse=True)
+
+    group_display_map = {g["group_id"]: g["display_name"] for g in groups_sorted}
     group_ids = list(group_display_map.keys())
 
     default_index = 0 if group_ids else None
@@ -206,8 +210,7 @@ def page_details():
                 st.rerun()
             return
 
-        analysis_data = data.get("analysis")
-        if not analysis_data:
+        if data.get("overall_status") != "SUCCESS":
             st.warning("Данные анализа креатива еще не готовы или произошла ошибка при обработке.")
             if st.button("Повторить попытку"):
                 st.rerun()

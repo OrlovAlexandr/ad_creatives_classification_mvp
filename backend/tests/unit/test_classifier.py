@@ -1,10 +1,12 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import numpy as np
 import torch
 from config import NUM_LABELS
-from ml_models.classifier import classify_creative, get_bert_model_and_tokenizer
+from ml_models.classifier import classify_creative
+from ml_models.classifier import get_bert_model_and_tokenizer
 from ml_models.preprocessing import NUM_COCO
 
 
@@ -60,14 +62,14 @@ class TestClassifier(unittest.TestCase):
         mock_model_instance.to.assert_called()
         mock_model_instance.eval.assert_called_once()
 
-        self.assertEqual(model, mock_model_instance)
-        self.assertEqual(tokenizer, mock_tokenizer)
+        assert model == mock_model_instance
+        assert tokenizer == mock_tokenizer
 
     @patch("ml_models.classifier.get_bert_model_and_tokenizer")  # Мокаем методы
     @patch("ml_models.classifier.clean_text_for_bert")
     @patch("ml_models.classifier.yolo_to_vector_for_bert")
     def test_classify_creative_success(
-        self, mock_yolo_to_vec, mock_clean_text, mock_get_model_tokenizer
+        self, mock_yolo_to_vec, mock_clean_text, mock_get_model_tokenizer,
     ):
         mock_model = MagicMock(name="MockModel")
         mock_tokenizer = MagicMock(name="MockTokenizer")
@@ -91,7 +93,7 @@ class TestClassifier(unittest.TestCase):
         # Имитируем tokenizer
         mock_encoding = {
             "input_ids": torch.tensor(
-                [[101, 2023, 2003, 1037, 13997, 11510, 1012, 102]]
+                [[101, 2023, 2003, 1037, 13997, 11510, 1012, 102]],
             ),
             "attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1]]),
         }
@@ -108,10 +110,10 @@ class TestClassifier(unittest.TestCase):
         mock_model.forward.assert_called()
 
         exp_topic = "cups"
-        self.assertEqual(main_topic, exp_topic)
-        self.assertIsInstance(confidence, float)
-        self.assertGreaterEqual(confidence, 0.0)
-        self.assertLessEqual(confidence, 1.0)
+        assert main_topic == exp_topic
+        assert isinstance(confidence, float)
+        assert confidence >= 0.0
+        assert confidence <= 1.0
 
     @patch("ml_models.classifier.get_bert_model_and_tokenizer")
     def test_classify_creative_model_exception(self, mock_get_model_tokenizer):
@@ -122,8 +124,8 @@ class TestClassifier(unittest.TestCase):
 
         main_topic, confidence = classify_creative(ocr_text, detected_objects)
 
-        self.assertIsNone(main_topic)
-        self.assertEqual(confidence, 0.0)
+        assert main_topic is None
+        assert confidence == 0.0
         mock_get_model_tokenizer.assert_called_once()
 
 

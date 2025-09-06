@@ -85,10 +85,11 @@ def detect_objects(image_path: str, conf_threshold: float = CONF_THRESHOLD) -> l
 
             detections.sort(key=lambda x: x['confidence'], reverse=True)
             return detections[:3]
-        else:
-            logger.info("[YOLO] Объекты не обнаружены или results пустой")
-            return []
 
     except Exception:
         logger.exception(f"Ошибка при выполнении детекции YOLO для {image_path}")
         raise
+
+    else:
+        logger.info("[YOLO] Объекты не обнаружены или results пустой")
+        return []

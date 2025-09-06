@@ -161,7 +161,9 @@ def page_analytics():
         st.info("Нет доступных групп")
         return
 
-    group_display_map = {g["group_id"]: g["display_name"] for g in groups}
+    groups_sorted = sorted(groups, key=lambda x: x["group_id"], reverse=True) # grp_YYYYMMDD_HHMMSS_uuid
+
+    group_display_map = {g["group_id"]: g["display_name"] for g in groups_sorted}
     group_ids = list(group_display_map.keys())
     default_index = 0 if group_ids else None
 
