@@ -47,20 +47,6 @@
 
 ---
 
-# Запуск
-```shell
-git clone https://github.com/OrlovAlexandr/ad_creatives_classification_mvp.git
-cd ad_creatives_classification_mvp
-cp .env.example .env
-docker-compose up --build
-```
-Веса модели и тестовый набор данных можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ). Веса необходимо положить в папку minio_init и выполнить команду 
-```shell
-unzip models.zip 
-```
-Ссылка: http://localhost:8001/
----
-
 ## Структура проекта
 ```
 ad_creatives_classification/
@@ -99,7 +85,11 @@ ad_creatives_classification/
 ├── .env.example                 # Пример переменных окружения
 └── README.md
 ```
+
 ---
+
+# Запуск
+
 ## Требования
 
 *   Docker & Docker Compose
@@ -107,14 +97,20 @@ ad_creatives_classification/
 
 ## Установка
 
-1.  Клонируйте репозиторий проекта.
-2.  При необходимости, измените переменные окружения в файле `.env`.
-3.  В корневой директории проекта выполните:
-    ```bash
-    docker-compose up -d --build
-    ```
-4.  Дождитесь запуска всех сервисов. Проверить статус можно командой `docker-compose ps`.
-5.  Приложение будет доступно:
+```shell
+git clone https://github.com/OrlovAlexandr/ad_creatives_classification_mvp.git
+cd ad_creatives_classification_mvp
+cp .env.example .env
+docker-compose up --build
+```
+Веса модели и тестовый набор данных можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ). Веса необходимо положить в папку minio_init и выполнить команду 
+```shell
+unzip models.zip 
+```
+
+Дождитесь запуска всех сервисов. Проверить статус можно командой `docker-compose ps`.
+
+Приложение будет доступно:
     *   **Frontend (Streamlit UI):** `http://localhost:8501`
     *   **Backend (FastAPI API):** `http://localhost:8000`
     *   **Minio:** `http://localhost:9001`
@@ -124,20 +120,21 @@ ad_creatives_classification/
 ```bash
 docker-compose down
 ```
+
 ## Настройки приложения
 
 * Настройки, которые можно изменить через пользовательский интерфейс пока ограничены только выбором количества доминирующих и второстепенных цветов. 
 
-* Настройка палитры цветов можно изменить в `backend/config.py` в списках `PALETTE_HEX`, `MONOCHROME_HEX_SET`, `COLOR_CLASSES`, `COLOR_VISUAL_CLASSES` (логика подбора палитры отражена в отдельной документации).
+*   **Настройку палитры цветов** можно изменить в `backend/config.py` в списках `PALETTE_HEX`, `MONOCHROME_HEX_SET`, `COLOR_CLASSES`, `COLOR_VISUAL_CLASSES`.
 *   **Количество воркеров Celery:** Количество одновременно обрабатываемых задач регулируется параметром `CELERY_CONCURRENCY` в файле `.env`. После изменения этого параметра необходимо перезапустить сервис `celery_worker`:
     ```bash
     docker-compose restart celery_worker
     ```
-
-* либо ввести команду, указав число в качестве значения.
+    либо ввести команду, указав число в качестве значения.
     ```bash 
     CELERY_CONCURRENCY=2 docker-compose up -d celery_worker
     ```
+
 ## Мониторинг и логи
 
 *   **Логи сервисов:** Используйте `docker-compose logs <имя_сервиса>` (например, `docker-compose logs backend`, `docker-compose logs celery_worker`) для просмотра логов конкретного сервиса.
