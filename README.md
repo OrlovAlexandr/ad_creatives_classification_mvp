@@ -111,9 +111,9 @@ unzip models.zip
 Дождитесь запуска всех сервисов. Проверить статус можно командой `docker-compose ps`.
 
 Приложение будет доступно:
-    *   **Frontend (Streamlit UI):** `http://localhost:8501`
-    *   **Backend (FastAPI API):** `http://localhost:8000`
-    *   **Minio:** `http://localhost:9001`
+*   **Frontend (Streamlit UI):** `http://localhost:8501`
+*   **Backend (FastAPI API):** `http://localhost:8000`
+*   **Minio:** `http://localhost:9001`
 
 ## Остановка
 
