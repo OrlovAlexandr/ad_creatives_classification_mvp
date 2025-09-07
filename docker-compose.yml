@@ -64,6 +64,7 @@ services:
 
   backend:
     build: ./backend
+    working_dir: /app
     env_file:
       - .env
     ports:
@@ -76,6 +77,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET: ${MINIO_BUCKET:-creatives}
+      PYTHONPATH: /app
     depends_on:
       db:
         condition: service_healthy

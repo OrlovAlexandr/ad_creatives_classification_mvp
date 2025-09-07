@@ -1,4 +1,4 @@
-import os  # noqa: INP001
+import os
 
 from dotenv import load_dotenv
 

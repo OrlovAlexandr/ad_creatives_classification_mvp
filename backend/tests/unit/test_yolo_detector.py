@@ -3,9 +3,9 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 import torch
 from ml_models.yolo_detector import detect_objects
-import pytest
 
 
 CLOCK_THRESHOLD = 0.85
