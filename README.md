@@ -101,7 +101,7 @@ ad_creatives_classification/
 git clone https://github.com/OrlovAlexandr/ad_creatives_classification_mvp.git
 cd ad_creatives_classification_mvp
 cp .env.example .env
-docker-compose up --build
+docker-compose up -d --build
 ```
 Веса модели и тестовый набор данных можно [скачать здесь](https://disk.yandex.ru/d/wUhvyDwGhma_mQ). Веса необходимо положить в папку minio_init и выполнить команду 
 ```shell
@@ -113,7 +113,7 @@ unzip models.zip
 Приложение будет доступно:
 *   **Frontend (Streamlit UI):** `http://localhost:8501`
 *   **Backend (FastAPI API):** `http://localhost:8000`
-*   **Minio:** `http://localhost:9001`
+*   **MinIO:** `http://localhost:9001`
 
 ## Остановка
 
